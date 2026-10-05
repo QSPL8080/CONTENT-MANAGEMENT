@@ -1,0 +1,46 @@
+import type { UserRole } from '../src/types';
+
+/**
+ * Quickupp Softech ContentFlow team roster (from the SRS, page 17–18).
+ *
+ * Every email here is seeded into the users table on server start (if it is not
+ * already there). The users table IS the Google sign-in allowlist: only active
+ * users whose email is in the table can use "Continue with Google".
+ *
+ * Seeding never overwrites a user that already exists, so any change an admin
+ * makes later on the Team page (name, email, role, disabling) is preserved.
+ *
+ * Manager (DMM) email has not been given yet — add it from the Team page
+ * (role: Manager) or append it here when available.
+ */
+export interface RosterEntry {
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
+export const TEAM_ROSTER: RosterEntry[] = [
+  // Admins
+  { name: 'Quickupp CMO', email: 'quickuppsoftech.cmo@gmail.com', role: 'admin' },
+  { name: 'Snehal Pawar', email: 'snehalpawar12014@gmail.com', role: 'admin' },
+
+  // Manager (DMM) — email to be provided
+  // { name: 'DMM', email: '<manager-email>@gmail.com', role: 'manager' },
+
+  // Graphic Designers
+  // NOTE: the SRS lists "qs.graphicdesingner@gamil.com" — "gamil" is treated as a typo for gmail.
+  { name: 'Devyani Ankush Bhoye', email: 'qs.graphicdesingner@gmail.com', role: 'graphic_designer' },
+  { name: 'Rutuja Ganesh Pawar', email: 'qsgraphicdesigner2@gmail.com', role: 'graphic_designer' },
+  { name: 'Swapnil Nawadkar', email: 'quickupp.graphicdesigns@gmail.com', role: 'graphic_designer' },
+
+  // Video Editors
+  { name: 'Ubaid Maner', email: 'dmquickuppsoftech@gmail.com', role: 'editor' },
+  { name: 'Rahul Sanjay Mahajan', email: 'qs.photography0079@gmail.com', role: 'editor' },
+
+  // Interns (posting interns)
+  { name: 'Pratiksha Magatrao', email: 'qsdmintern01@gmail.com', role: 'poster' },
+  // NOTE: in the SRS this email sits between Pratiksha and Tanisha; assigned to Tanisha.
+  { name: 'Tanisha Suresh Bangde', email: 'qsdmintern4@gmail.com', role: 'poster' },
+  { name: 'Gayatri Ratnakar Sitafale', email: 'qsintern009@gmail.com', role: 'poster' },
+  { name: 'Kiran B Arote', email: 'qsdmintern03@gmail.com', role: 'poster' },
+];

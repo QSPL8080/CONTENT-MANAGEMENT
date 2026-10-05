@@ -1,0 +1,14 @@
+﻿{
+  "users": [],
+  "content": [],
+  "activity_logs": [],
+  "issues": [],
+  "notifications": [],
+  "settings": {
+    "workspace_name": "ContentFlow",
+    "default_timezone": "Asia/Kolkata",
+    "default_platform": "instagram",
+    "allow_editor_replace": true,
+    "notification_email": true
+  }
+}

@@ -1,0 +1,372 @@
+import { 
+  User, 
+  ContentItem, 
+  ActivityLog, 
+  ContentIssue, 
+  AppNotification, 
+  OperationalMetrics, 
+  WorkspaceSettings,
+  ContentStatus 
+} from '../types';
+
+// Sessions use an httpOnly cookie set by the server — the browser sends it automatically
+// on every same-origin request, so no user id is ever sent from the client.
+
+/** Called whenever the server says the session is gone (401) so the app can show the sign-in screen. */
+let unauthorizedHandler: (() => void) | null = null;
+export function onUnauthorized(handler: () => void) {
+  unauthorizedHandler = handler;
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...options,
+      headers,
+      credentials: 'same-origin',
+    });
+  } catch {
+    throw new ApiError('Network error — check your internet connection and try again.', 0);
+  }
+
+  if (!response.ok) {
+    let errorMsg = `Request failed (${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson.error) errorMsg = errJson.error;
+    } catch {
+      // fallback to status text
+    }
+    if (response.status === 401 && !endpoint.startsWith('/api/auth/login') && !endpoint.startsWith('/api/auth/google')) {
+      unauthorizedHandler?.();
+    }
+    throw new ApiError(errorMsg, response.status);
+  }
+
+  return response.json();
+}
+
+export const api = {
+  // Auth
+  getAuthConfig: () =>
+    request<{ googleClientId: string | null; workspaceName: string }>('/api/auth/config'),
+  getMe: () =>
+    request<{ user: User; realUser: User; actingAs: boolean }>('/api/auth/me'),
+  login: (credentials: { email: string; password: string }) =>
+    request<{ success: boolean; user: User }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    }),
+  loginWithGoogle: (credential: string) =>
+    request<{ success: boolean; user: User }>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    }),
+  logout: () => request<{ success: boolean }>('/api/auth/logout', { method: 'POST' }),
+  /** Super Admin only: preview the app as another user (read-only). Pass '' to exit. */
+  viewAs: (userId: string) =>
+    request<{ success: boolean; user: User; actingAs: boolean }>('/api/auth/view-as', {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
+
+  // Users
+  getUsers: () => request<{ users: User[] }>('/api/users'),
+  createUser: (userData: Partial<User> & { password?: string }) => 
+    request<{ user: User }>('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    }),
+  updateUser: (id: string, updates: Partial<User> & { password?: string }) =>
+    request<{ user: User }>(`/api/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+
+
+  // Metrics
+  getMetrics: () => request<OperationalMetrics>('/api/metrics'),
+
+  // Content
+  getContent: (filters?: {
+    status?: string;
+    editor_id?: string;
+    poster_id?: string;
+    platform?: string;
+    date?: string;
+    search?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v) params.append(k, v);
+      });
+    }
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<{ content: ContentItem[] }>(`/api/content${query}`);
+  },
+
+  getContentById: (id: string) =>
+    request<{
+      content: ContentItem;
+      activity_logs: ActivityLog[];
+      issues: ContentIssue[];
+    }>(`/api/content/${id}`),
+
+  createContent: (data: Partial<ContentItem>) =>
+    request<{ content: ContentItem }>('/api/content', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateContent: (id: string, data: Partial<ContentItem>) =>
+    request<{ content: ContentItem }>(`/api/content/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  uploadVideo: async (
+    contentId: string, 
+    file: File, 
+    onProgress?: (percent: number) => void
+  ): Promise<{ content: ContentItem; file?: any }> => {
+    // If file is > 15MB, use chunked upload to completely bypass proxy body size limits (e.g. 32MB)
+    if (file.size > 15 * 1024 * 1024) {
+      return uploadVideoChunked(contentId, file, onProgress);
+    }
+
+    try {
+      // Attempt direct upload for smaller files
+      return await uploadVideoDirect(contentId, file, onProgress);
+    } catch (err: any) {
+      console.warn('Direct upload failed, falling back to chunked upload:', err?.message);
+      // Fallback automatically to chunked upload if direct was blocked or failed
+      return await uploadVideoChunked(contentId, file, onProgress);
+    }
+  },
+
+  attachSampleVideo: (contentId: string) =>
+    request<{ success: boolean; content: ContentItem }>(`/api/content/${contentId}/attach-sample-video`, {
+      method: 'POST',
+    }),
+
+  markPosted: (contentId: string, data: {
+    post_url?: string;
+    posted_at?: string;
+    posting_notes?: string;
+    platform?: string;
+  }) =>
+    request<{ success: boolean; content: ContentItem }>(`/api/content/${contentId}/mark-posted`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  requestRevision: (contentId: string, notes: string) =>
+    request<{ success: boolean; content: ContentItem }>(`/api/content/${contentId}/revision`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    }),
+
+  reportIssue: (contentId: string, data: { issue_type: string; description: string }) =>
+    request<{ success: boolean; issue: ContentIssue }>(`/api/content/${contentId}/report-issue`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  duplicateContent: (contentId: string) =>
+    request<{ success: boolean; content: ContentItem }>(`/api/content/${contentId}/duplicate`, {
+      method: 'POST',
+    }),
+
+  deleteContent: (contentId: string) =>
+    request<{ success: boolean }>(`/api/content/${contentId}`, {
+      method: 'DELETE',
+    }),
+
+  // Issues
+  getIssues: (contentId?: string) => {
+    const query = contentId ? `?content_id=${contentId}` : '';
+    return request<{ issues: ContentIssue[] }>(`/api/issues${query}`);
+  },
+  resolveIssue: (issueId: string) =>
+    request<{ success: boolean; issue: ContentIssue }>(`/api/issues/${issueId}/resolve`, {
+      method: 'PATCH',
+    }),
+
+  // Activity
+  getActivity: (contentId?: string) => {
+    const query = contentId ? `?content_id=${contentId}` : '';
+    return request<{ activity_logs: ActivityLog[] }>(`/api/activity${query}`);
+  },
+
+  // Notifications
+  getNotifications: () =>
+    request<{ notifications: AppNotification[] }>('/api/notifications'),
+  markNotificationRead: (id: string) =>
+    request<{ success: boolean }>(`/api/notifications/${id}/read`, {
+      method: 'PATCH',
+    }),
+  markAllNotificationsRead: () =>
+    request<{ success: boolean }>('/api/notifications/read-all', {
+      method: 'POST',
+    }),
+
+  // Settings
+  getSettings: () => request<{ settings: WorkspaceSettings; now?: { date: string; time: string } }>('/api/settings'),
+  updateSettings: (settings: Partial<WorkspaceSettings>) =>
+    request<{ settings: WorkspaceSettings }>('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
+    }),
+};
+
+// --- Resilient Video Upload Internals ---
+
+async function uploadVideoDirect(
+  contentId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ content: ContentItem; file?: any }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('video', file);
+
+    xhr.open('POST', `/api/content/${contentId}/upload-video`, true);
+    xhr.withCredentials = true;
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data);
+        } catch {
+          reject(new Error('Invalid server response format'));
+        }
+      } else {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          reject(new Error(data.error || `Upload failed with status ${xhr.status}`));
+        } catch {
+          if (xhr.status === 413) {
+            reject(new Error('File size exceeds single request limit'));
+          } else {
+            reject(new Error(`Upload failed (${xhr.status}): ${xhr.statusText || 'Server error'}`));
+          }
+        }
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during upload — check your connection and retry.'));
+    xhr.ontimeout = () => reject(new Error('Direct upload request timed out'));
+    xhr.send(formData);
+  });
+}
+
+async function uploadVideoChunked(
+  contentId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ content: ContentItem; file?: any }> {
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB slices
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const uploadId = `up_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+  let finalResult: any = null;
+
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    const start = chunkIndex * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunkBlob = file.slice(start, end);
+
+    const formData = new FormData();
+    formData.append('chunk', chunkBlob);
+    formData.append('uploadId', uploadId);
+    formData.append('chunkIndex', String(chunkIndex));
+    formData.append('totalChunks', String(totalChunks));
+    formData.append('filename', file.name);
+    formData.append('filesize', String(file.size));
+
+    // Send chunk with retry on transient failure
+    const sendChunk = async (attempt = 1): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/api/content/${contentId}/upload-chunk`, true);
+        xhr.withCredentials = true;
+
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const currentChunkBytes = event.loaded;
+              const totalLoaded = start + currentChunkBytes;
+              const percent = Math.min(99, Math.round((totalLoaded / file.size) * 100));
+              onProgress(percent);
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch {
+              reject(new Error('Invalid chunk response from server'));
+            }
+          } else {
+            try {
+              const errData = JSON.parse(xhr.responseText);
+              reject(new Error(errData.error || `Chunk error (${xhr.status})`));
+            } catch {
+              reject(new Error(`Chunk upload failed with status ${xhr.status}`));
+            }
+          }
+        };
+
+        xhr.onerror = () => {
+          if (attempt <= 2) {
+            console.warn(`Retry chunk ${chunkIndex + 1} attempt ${attempt + 1}...`);
+            setTimeout(() => sendChunk(attempt + 1).then(resolve).catch(reject), 800);
+          } else {
+            reject(new Error(`Network error while uploading part ${chunkIndex + 1} of ${totalChunks}`));
+          }
+        };
+
+        xhr.send(formData);
+      });
+    };
+
+    const chunkRes = await sendChunk();
+    if (chunkIndex === totalChunks - 1) {
+      finalResult = chunkRes;
+    }
+  }
+
+  if (onProgress) {
+    onProgress(100);
+  }
+
+  return finalResult;
+}

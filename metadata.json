@@ -1,0 +1,6 @@
+{
+  "name": "ContentFlow",
+  "description": "Video content operations and publishing management system for high-volume social media teams",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
