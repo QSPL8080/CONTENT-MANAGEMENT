@@ -1,12 +1,10 @@
 // Role keys stored in the database.
-//  super_admin      → Super Admin (owner; full control incl. other admins)
-//  admin            → Admin (full content + team control)
+//  admin            → Admin (full content, team, settings & workspace control)
 //  manager          → Manager / DMM (full content control, no team/settings changes)
 //  graphic_designer → Graphic Designer (creator: designs carousels, static posts, stories)
 //  editor           → Video Editor (creator: edits and uploads final videos)
 //  poster           → Intern (posting intern: downloads, publishes, marks posted)
 export type UserRole =
-  | 'super_admin'
   | 'admin'
   | 'manager'
   | 'graphic_designer'

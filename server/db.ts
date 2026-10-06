@@ -72,7 +72,7 @@ pool.on('error', (err) => {
 // ---------------------------------------------------------------------------
 // Schema (idempotent — runs on every start, safe on an existing database)
 // ---------------------------------------------------------------------------
-const ROLE_CHECK = `CHECK (role IN ('super_admin','admin','manager','graphic_designer','editor','poster'))`;
+const ROLE_CHECK = `CHECK (role IN ('admin','manager','graphic_designer','editor','poster'))`;
 
 const SCHEMA_SQL = `
 -- SRS 7.5: Workspace → Users → Content → Calendar (v1 runs one workspace: 'default')
@@ -202,7 +202,8 @@ ALTER TABLE content_items ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DE
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_workspace_fk') THEN ALTER TABLE users ADD CONSTRAINT users_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_workspace_fk') THEN ALTER TABLE content_items ADD CONSTRAINT content_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
 
--- Role list: super_admin, admin, manager, graphic_designer, editor (video editor), poster (intern)
+-- Role list: admin, manager, graphic_designer, editor (video editor), poster (intern)
+DELETE FROM users WHERE role NOT IN ('admin','manager','graphic_designer','editor','poster');
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check ${ROLE_CHECK};
 
@@ -413,7 +414,7 @@ class RelationalDatabase {
     };
   }
 
-  /** Email + password sign-in. Accounts without a password (not yet set by the Super Admin) cannot sign in. */
+  /** Email + password sign-in. Accounts without a password (not yet set by an Admin) cannot sign in. */
   async verifyUserPassword(email: string, plainPassword: string): Promise<User | null> {
     const userWithHash = await this.getUserByEmail(email);
     if (!userWithHash || !userWithHash.password_hash || !plainPassword) return null;
@@ -423,9 +424,9 @@ class RelationalDatabase {
     return safeUser;
   }
 
-  async countActiveSuperAdmins(excludeUserId?: string): Promise<number> {
+  async countActiveAdmins(excludeUserId?: string): Promise<number> {
     const { rows } = await pool.query(
-      `SELECT COUNT(*)::int AS n FROM users WHERE role = 'super_admin' AND status = 'active' AND id <> $1`,
+      `SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND status = 'active' AND id <> $1`,
       [excludeUserId || '']
     );
     return rows[0].n;
@@ -463,7 +464,7 @@ class RelationalDatabase {
       const passwordHash = await bcrypt.hash(updates.password, 10);
       sets.push(`password_hash = $${i++}`);
       vals.push(passwordHash);
-      // Keep the Super Admin's view of the password in sync with every change
+      // Keep the Admin's view of the password in sync with every change
       sets.push(`password_enc = $${i++}`);
       vals.push(encryptPassword(updates.password));
     }
@@ -540,7 +541,7 @@ class RelationalDatabase {
     return bcrypt.compare(plainPassword, rows[0].password_hash);
   }
 
-  /** Super Admin only (checked in the route): the user's current password, if it can be shown. */
+  /** Admin only (checked in the route): the user's current password, if it can be shown. */
   async revealPassword(userId: string): Promise<string | null> {
     const { rows } = await pool.query('SELECT password_enc FROM users WHERE id = $1', [userId]);
     return decryptPassword(rows[0]?.password_enc);
@@ -617,7 +618,7 @@ class RelationalDatabase {
   /** Users who should hear about a content item: managers/admins + its creator + its intern. */
   async getStakeholderIds(item: Pick<ContentItem, 'editor_id' | 'poster_id'>): Promise<string[]> {
     const { rows } = await pool.query(
-      `SELECT id FROM users WHERE status = 'active' AND role IN ('super_admin','admin','manager')`
+      `SELECT id FROM users WHERE status = 'active' AND role IN ('admin','manager')`
     );
     const ids = new Set<string>(rows.map(r => r.id));
     if (item.editor_id) ids.add(item.editor_id);
@@ -1079,7 +1080,7 @@ class RelationalDatabase {
     if (content) {
       // FR-POST-7: notify Admin(s)/Manager(s) and the assigned creator
       const { rows: mgrs } = await pool.query(
-        `SELECT id FROM users WHERE status = 'active' AND role IN ('super_admin','admin','manager')`
+        `SELECT id FROM users WHERE status = 'active' AND role IN ('admin','manager')`
       );
       await this.notifyUsers([...mgrs.map(r => r.id), content.editor_id], {
         title: `Issue reported: "${content.title}"`,
@@ -1344,7 +1345,7 @@ class RelationalDatabase {
   }
 
   // ------------------------------------------------------------------
-  // Init — create/migrate schema, seed Super Admin and the team roster
+  // Init — create/migrate schema and seed the team roster
   // ------------------------------------------------------------------
   async init(): Promise<void> {
     await ensureDatabaseExists();
@@ -1366,9 +1367,6 @@ class RelationalDatabase {
       }
 
       // --- Credentials -------------------------------------------------------------
-      const saEmail = (process.env.SUPER_ADMIN_EMAIL || 'superadmin@gmail.com').trim().toLowerCase();
-      const saPassword = process.env.SUPER_ADMIN_PASSWORD || 'content@1234';
-      const saName = process.env.SUPER_ADMIN_NAME || 'Super Admin';
       const teamPassword = process.env.TEAM_DEFAULT_PASSWORD || 'Quickupp@123';
       const rosterEmails = TEAM_ROSTER.map(m => m.email.trim().toLowerCase());
 
@@ -1381,27 +1379,10 @@ class RelationalDatabase {
       // The "temporary password / must change at next sign-in" step is no longer used
       await client.query('UPDATE users SET must_change_password = FALSE WHERE must_change_password = TRUE');
 
-      // 1) Make sure the Super Admin exists
-      let sa = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [saEmail]);
-      if (sa.rows.length === 0) {
-        await client.query(
-          `INSERT INTO users (id, name, email, password_hash, avatar, role, status)
-           VALUES ($1, $2, $3, '', '', 'super_admin', 'active')`,
-          [newId('user'), saName, saEmail]
-        );
-        sa = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [saEmail]);
-        await setPassword(sa.rows[0].id, saPassword, false);
-        sa = await client.query('SELECT * FROM users WHERE LOWER(email) = $1', [saEmail]);
-        console.log(`✅ Super Admin created: ${saEmail}`);
-      } else if (sa.rows[0].role !== 'super_admin' || sa.rows[0].status !== 'active') {
-        await client.query(`UPDATE users SET role = 'super_admin', status = 'active' WHERE id = $1`, [sa.rows[0].id]);
-      }
-      if (process.env.SUPER_ADMIN_RESET_PASSWORD === 'true' || !sa.rows[0].password_hash) {
-        await setPassword(sa.rows[0].id, saPassword, false);
-        console.log(`✅ Super Admin password reset for ${saEmail}`);
-      }
+      // Purge any invalid/non-standard roles
+      await client.query(`DELETE FROM users WHERE role NOT IN ('admin','manager','graphic_designer','editor','poster')`);
 
-      // 2) Make sure every roster member exists (new ones get the default team password)
+      // 1) Make sure every roster member exists (new ones get the default team password)
       for (const member of TEAM_ROSTER) {
         const email = member.email.trim().toLowerCase();
         const found = await client.query('SELECT id, password_hash FROM users WHERE LOWER(email) = $1', [email]);
@@ -1419,18 +1400,16 @@ class RelationalDatabase {
         }
       }
 
-      // 3) One-time clean-up: keep ONLY the Super Admin + the team list, with fresh credentials.
-      //    Removes old/test accounts (e.g. admin@cf.com) and signs everyone out. Runs once.
-      const CREDENTIALS_VERSION = 2;
+      // 2) Clean-up: keep ONLY the team list with fresh credentials.
+      //    Removes old/test accounts and signs everyone out.
+      const CREDENTIALS_VERSION = 3;
       const { rows: verRows } = await client.query('SELECT id, credentials_version FROM settings ORDER BY id LIMIT 1');
       if (verRows[0] && verRows[0].credentials_version < CREDENTIALS_VERSION) {
-        const keep = [saEmail, ...rosterEmails];
+        const keep = [...rosterEmails];
         const removed = await client.query(
           `DELETE FROM users WHERE LOWER(email) <> ALL($1::text[]) RETURNING email`,
           [keep]
         );
-        await setPassword(sa.rows[0].id, saPassword, false);
-        await client.query(`UPDATE users SET name = $1 WHERE id = $2`, [saName, sa.rows[0].id]);
         for (const member of TEAM_ROSTER) {
           const { rows } = await client.query('SELECT id FROM users WHERE LOWER(email) = $1', [member.email.trim().toLowerCase()]);
           if (!rows[0]) continue;
@@ -1444,11 +1423,11 @@ class RelationalDatabase {
         await client.query('DELETE FROM notifications WHERE user_id NOT IN (SELECT id FROM users)');
         await client.query('UPDATE settings SET credentials_version = $1 WHERE id = $2', [CREDENTIALS_VERSION, verRows[0].id]);
         console.log(
-          `✅ Credentials reset: kept Super Admin + ${TEAM_ROSTER.length} team members` +
+          `✅ Credentials reset: kept ${TEAM_ROSTER.length} team members` +
           (removed.rows.length ? `, removed ${removed.rows.length} old account(s): ${removed.rows.map(r => r.email).join(', ')}` : '')
         );
       }
-      console.log(`🔐 Super Admin sign-in: ${saEmail}`);
+      console.log(`🔐 Admin sign-in accounts configured`);
 
       await client.query('DELETE FROM sessions WHERE expires_at < NOW()');
     } finally {

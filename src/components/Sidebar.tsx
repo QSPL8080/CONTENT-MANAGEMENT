@@ -55,15 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const getNavItems = () => {
-    if (currentRole === 'super_admin') {
-      // Super Admin: oversight + user management + settings
-      return [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
-        { id: 'team', label: 'Manage Users', icon: Users, badge: null },
-        { id: 'activity', label: 'Activity', icon: Activity, badge: null },
-        { id: 'settings', label: 'Settings', icon: Settings, badge: null },
-      ];
-    } else if (currentRole === 'admin') {
+    if (currentRole === 'admin') {
       // Admin: full content management + user management + settings
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },

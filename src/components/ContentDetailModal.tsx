@@ -140,10 +140,9 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
     (content.status === 'EDITING' || content.status === 'PLANNED') &&
     content.scheduled_date < todayStr;
 
-  // Admins edit and manage content; Super Admin has oversight + task deletion
+  // Admins and Managers edit and manage content
   const managerial = canManageContent(currentUser.role);
   const canDelete = canDeleteContent(currentUser.role);
-  const isOverseer = currentUser.role === 'super_admin';
   const isAssignedCreator = isCreator(currentUser.role) && currentUser.id === content.editor_id;
   const canUploadOrReplace = managerial || (isAssignedCreator && content.status !== 'POSTED');
   const canMarkPosted = managerial || (isPoster(currentUser.role) && currentUser.id === content.poster_id);
@@ -369,12 +368,7 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                   <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight break-words min-w-0">
                     {content.title}
                   </h2>
-                  {isOverseer ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">
-                      <Shield className="w-3.5 h-3.5" />
-                      <span>Super Admin — view only</span>
-                    </span>
-                  ) : managerial ? (
+                  {managerial ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold">
                       <Shield className="w-3.5 h-3.5" />
                       <span>{roleLabel(currentUser.role)} — full edit access</span>
@@ -883,7 +877,6 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                   {/* Workflow Action Bar */}
                   <div className="pt-2 flex items-center justify-between gap-2 flex-wrap border-t border-slate-100">
                     <div className="flex items-center gap-2">
-                      {!isOverseer && (
                       <button
                         onClick={onReportIssueClick}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-colors border border-rose-200"
@@ -892,7 +885,6 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                         <AlertTriangle className="w-3.5 h-3.5" />
                         <span>Report Issue</span>
                       </button>
-                      )}
 
                       {managerial && content.status !== 'POSTED' && (
                         <button
@@ -993,14 +985,12 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                   Reported Problems
                 </h4>
-                {!isOverseer && (
-                  <button
-                    onClick={onReportIssueClick}
-                    className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
-                  >
-                    + Report New Problem
-                  </button>
-                )}
+                <button
+                  onClick={onReportIssueClick}
+                  className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                >
+                  + Report New Problem
+                </button>
               </div>
 
               {issues.length === 0 ? (

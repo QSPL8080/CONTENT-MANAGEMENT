@@ -74,14 +74,14 @@ export const EditorDashboard: React.FC<EditorDashboardProps> = ({
       <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-4 flex-wrap">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {roleLabel(currentUser.role)} Workspace
             </h1>
             <span className="text-sm font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
               {currentUser.name}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
             {isDesigner
               ? 'Your assigned graphics & designs. Open tasks, review briefs, resolve any reported issues, and upload the final creative.'
               : 'Your assigned video edits. Open tasks, review briefs, resolve any reported issues, and upload the final cuts.'}

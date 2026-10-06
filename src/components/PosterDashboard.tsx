@@ -97,14 +97,14 @@ export const PosterDashboard: React.FC<PosterDashboardProps> = ({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Publishing Queue
             </h1>
             <span className="text-sm font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
               {currentUser.name}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 flex items-center gap-1.5">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 flex items-center gap-1.5 font-medium">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
             <span className="text-slate-300">·</span>

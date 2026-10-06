@@ -1,7 +1,7 @@
 -- ContentFlow PostgreSQL schema (reference copy).
 -- You do NOT need to run this by hand: on start the server creates the database
 -- (default name: content_management) if it is missing, applies this schema, creates the
--- Super Admin and the team list (server/team.ts). See README.md.
+-- Admins and the team list (server/team.ts). See README.md.
 
 -- SRS 7.5: Workspace → Users → Content → Calendar (v1 runs one workspace: 'default')
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -128,9 +128,10 @@ ALTER TABLE content_items ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DE
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_workspace_fk') THEN ALTER TABLE users ADD CONSTRAINT users_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_workspace_fk') THEN ALTER TABLE content_items ADD CONSTRAINT content_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
 
--- Role list: super_admin, admin, manager, graphic_designer, editor (video editor), poster (intern)
+-- Role list: admin, manager, graphic_designer, editor (video editor), poster (intern)
+DELETE FROM users WHERE role NOT IN ('admin','manager','graphic_designer','editor','poster');
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('super_admin','admin','manager','graphic_designer','editor','poster'));
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','manager','graphic_designer','editor','poster'));
 
 CREATE INDEX IF NOT EXISTS idx_content_date    ON content_items (scheduled_date, scheduled_time);
 CREATE INDEX IF NOT EXISTS idx_content_editor  ON content_items (editor_id);

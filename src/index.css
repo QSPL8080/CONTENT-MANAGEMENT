@@ -1,7 +1,14 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Mulish", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Arima Madurai", "Arima", cursive, serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 
 @layer base {
   html {
+    font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -9,6 +16,23 @@
   }
   
   body {
-    @apply text-slate-900 bg-slate-100 font-sans;
+    @apply text-slate-900 bg-slate-100;
+    font-family: var(--font-sans);
   }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+  }
+}
+
+.font-arima {
+  font-family: "Arima Madurai", "Arima", cursive, serif;
+}
+
+.font-mulish {
+  font-family: "Mulish", sans-serif;
+}
+
+.font-space-mono {
+  font-family: var(--font-mono);
 }

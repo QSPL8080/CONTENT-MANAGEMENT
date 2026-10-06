@@ -130,7 +130,6 @@ function canViewContent(user: User, item: ContentItem) {
 
 async function canUploadFinal(user: User, item: ContentItem): Promise<string | null> {
   if (canManageContent(user.role)) return null;
-  if (user.role === 'super_admin') return 'The Super Admin account is for oversight — content is handled by Admins.';
   if (!isCreator(user.role) || item.editor_id !== user.id) {
     return 'Only the assigned Graphic Designer / Video Editor (or an Admin) can upload the final file.';
   }
@@ -183,7 +182,7 @@ async function startServer() {
     setSessionCookie(req, res, token);
   }
 
-  // Email + password sign-in. Only accounts the Super Admin has created (and given a password) can get in.
+  // Email + password sign-in. Only accounts the Admin has created (and given a password) can get in.
   app.post('/api/auth/login', asyncHandler(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
@@ -200,12 +199,12 @@ async function startServer() {
       recordFailedAttempt(limiterKey);
       const exists = await db.getUserByEmail(email);
       if (exists && !exists.password_hash) {
-        return res.status(401).json({ error: 'Your password has not been set yet. Ask the Super Admin to set it.' });
+        return res.status(401).json({ error: 'Your password has not been set yet. Ask an Admin to set it.' });
       }
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     if (user.status !== 'active') {
-      return res.status(403).json({ error: 'This account has been deactivated. Contact the Super Admin.' });
+      return res.status(403).json({ error: 'This account has been deactivated. Contact an Admin.' });
     }
     clearAttempts(limiterKey);
     await startSession(req, res, user, 'password');
@@ -280,7 +279,7 @@ async function startServer() {
   app.post('/api/users', asyncHandler(async (req, res) => {
     const actor = req.user;
     if (!canManageTeam(actor.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin and Admins can add team members.' });
+      return res.status(403).json({ error: 'Only Admins can add team members.' });
     }
     const name = String(req.body?.name || '').trim();
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -310,10 +309,10 @@ async function startServer() {
     res.status(201).json({ user: newUser });
   }));
 
-  // Super Admin & Admin: see a member's CURRENT password (kept in sync when they change it). Logged.
+  // Admin: see a member's CURRENT password (kept in sync when they change it). Logged.
   app.get('/api/users/:id/password', asyncHandler(async (req, res) => {
     if (!canManageTeam(req.user.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin and Admins can view passwords.' });
+      return res.status(403).json({ error: 'Only Admins can view passwords.' });
     }
     const target = await db.getUserById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
@@ -333,7 +332,7 @@ async function startServer() {
   app.patch('/api/users/:id', asyncHandler(async (req, res) => {
     const actor = req.user;
     if (!canManageTeam(actor.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin and Admins can edit team members.' });
+      return res.status(403).json({ error: 'Only Admins can edit team members.' });
     }
     const target = await db.getUserById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
@@ -382,12 +381,12 @@ async function startServer() {
       updates.password = password;
     }
 
-    // Never leave the workspace without an active Super Admin
-    const losingSuperAdmin =
-      target.role === 'super_admin' &&
-      ((updates.role && updates.role !== 'super_admin') || updates.status === 'disabled');
-    if (losingSuperAdmin && (await db.countActiveSuperAdmins(target.id)) === 0) {
-      return res.status(400).json({ error: 'There must always be at least one active Super Admin.' });
+    // Never leave the workspace without an active Admin
+    const losingAdmin =
+      target.role === 'admin' &&
+      ((updates.role && updates.role !== 'admin') || updates.status === 'disabled');
+    if (losingAdmin && (await db.countActiveAdmins(target.id)) === 0) {
+      return res.status(400).json({ error: 'There must always be at least one active Admin.' });
     }
 
     const updated = await db.updateUser(target.id, updates);
@@ -462,7 +461,7 @@ async function startServer() {
   app.post('/api/content', asyncHandler(async (req, res) => {
     const currentUser = req.user;
     if (!canManageContent(currentUser.role)) {
-      return res.status(403).json({ error: 'Only Admins can create content. The Super Admin account is for oversight.' });
+      return res.status(403).json({ error: 'Only Admins and Managers can create content.' });
     }
 
     const {
@@ -523,9 +522,6 @@ async function startServer() {
     const body = req.body || {};
     const attempted = Object.keys(body);
 
-    if (currentUser.role === 'super_admin') {
-      return res.status(403).json({ error: 'The Super Admin account is for oversight — content is edited by Admins.' });
-    }
     if (canManageContent(currentUser.role)) {
       if (body.status !== undefined && !CONTENT_STATUSES.includes(body.status)) {
         return res.status(400).json({ error: 'Unknown status' });
@@ -717,7 +713,7 @@ async function startServer() {
     });
   });
 
-  // Demo sample clip (Super Admin only — so real tasks can't be "completed" with a sample)
+  // Demo sample clip (Admin & Manager only — so real tasks can't be "completed" with a sample)
   app.post('/api/content/:id/attach-sample-video', asyncHandler(async (req, res) => {
     if (!canManageContent(req.user.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can attach demo sample videos.' });
@@ -816,7 +812,7 @@ async function startServer() {
 
   app.delete('/api/content/:id', asyncHandler(async (req, res) => {
     if (!canDeleteContent(req.user.role)) {
-      return res.status(403).json({ error: 'Only Admins and Super Admins can delete content.' });
+      return res.status(403).json({ error: 'Only Admins can delete content.' });
     }
     const success = await db.deleteContent(req.params.id, req.user);
     if (!success) return res.status(404).json({ error: 'Content not found' });
@@ -888,7 +884,7 @@ async function startServer() {
 
   app.patch('/api/settings', asyncHandler(async (req, res) => {
     if (!canManageTeam(req.user.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin and Admins can change workspace settings.' });
+      return res.status(403).json({ error: 'Only Admins can change workspace settings.' });
     }
     const body = req.body || {};
     const updates: Record<string, any> = {};
@@ -937,7 +933,7 @@ async function startServer() {
   // Manual Trigger for 90-day Storage Cleanup
   app.post('/api/settings/cleanup', asyncHandler(async (req, res) => {
     if (!canManageTeam(req.user.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin and Admins can trigger storage cleanup.' });
+      return res.status(403).json({ error: 'Only Admins can trigger storage cleanup.' });
     }
     const settings = await db.getSettings();
     const days = req.body?.retention_days ? Number(req.body.retention_days) : (settings.retention_days || 90);

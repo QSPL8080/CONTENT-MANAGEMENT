@@ -468,10 +468,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <Camera className="w-6 h-6 stroke-[2.2]" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Content Calendar
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium flex items-center gap-2">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium flex items-center gap-2">
               <span>{canManage ? 'All scheduled content' : 'Content assigned to you'}</span>
               <span className="inline-block w-1 h-1 rounded-full bg-slate-300" />
               <span>{filteredContent.length} posts active</span>
@@ -786,7 +786,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <span>Archive</span>
               </button>
 
-              {/* Demo data (Super Admin only) */}
+              {/* Demo data (Admin only) */}
               {currentUser.role === 'admin' && (
               <button
                 onClick={() => setIsBackendDrawerOpen(true)}

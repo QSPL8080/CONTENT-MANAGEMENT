@@ -104,11 +104,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
     'w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none disabled:opacity-60';
 
   return (
-    <form onSubmit={handleSave} className="space-y-6 w-full max-w-5xl">
+    <form onSubmit={handleSave} className="space-y-6 w-full">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Settings</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Workspace configuration, timezone, publishing defaults and storage policies.</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Settings</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">Workspace configuration, timezone, publishing defaults and storage policies.</p>
         </div>
         {canEdit && (
           <button
@@ -223,7 +223,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
       </section>
 
       {!canEdit && (
-        <p className="text-xs text-slate-500">Only the Super Admin and Admins can change settings.</p>
+        <p className="text-xs text-slate-500">Only Admins can change settings.</p>
       )}
     </form>
   );

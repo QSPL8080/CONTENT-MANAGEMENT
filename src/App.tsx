@@ -449,7 +449,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500">
         <Loader2 className="w-8 h-8 animate-spin text-slate-800 mb-2" />
-        <p className="text-sm font-medium">Booting ContentFlow workspace...</p>
+        <p className="text-sm font-medium">Booting Quickupp ContentOps workspace...</p>
       </div>
     );
   }
@@ -577,9 +577,8 @@ export default function App() {
         />
 
         {/* Main Content View Area */}
-        <main className="flex-1 px-3 py-4 sm:p-6 lg:p-8 2xl:p-10 min-w-0 w-full overflow-x-hidden">
-          {/* Keep lines readable on very wide monitors */}
-          <div className="mx-auto w-full max-w-[1920px] min-w-0">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 w-full overflow-x-hidden">
+          <div className="w-full min-w-0">
           {/* TAB 1: DASHBOARD (Adapts to Role) */}
           {currentTab === 'dashboard' && managerial && (
             <AdminDashboard

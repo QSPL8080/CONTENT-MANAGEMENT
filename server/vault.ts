@@ -3,12 +3,12 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * Password vault: keeps an AES-256-GCM encrypted copy of each user's CURRENT password so the
- * Super Admin can reveal it on the Team page. Sign-in itself still checks the bcrypt hash.
+ * Password vault: keeps an AES-256-GCM encrypted copy of each user's CURRENT password so
+ * Admins can reveal it on the Team page. Sign-in itself still checks the bcrypt hash.
  *
  * Key: PASSWORD_VAULT_KEY in .env (64 hex chars), otherwise a random key generated once and
  * saved to data/.vault-key. Keep that file — without it, stored passwords can't be revealed
- * (sign-in keeps working; the Super Admin can just set new passwords).
+ * (sign-in keeps working; Admins can just set new passwords).
  */
 const KEY_FILE = path.join(process.cwd(), 'data', '.vault-key');
 let cachedKey: Buffer | null = null;

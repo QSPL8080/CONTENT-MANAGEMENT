@@ -34,11 +34,11 @@ async function main() {
               (password_hash <> '') AS has_password,
               must_change_password
          FROM users
-        ORDER BY CASE role WHEN 'super_admin' THEN 0 WHEN 'admin' THEN 1 WHEN 'manager' THEN 2
-                           WHEN 'graphic_designer' THEN 3 WHEN 'editor' THEN 4 ELSE 5 END, name`
+        ORDER BY CASE role WHEN 'admin' THEN 0 WHEN 'manager' THEN 1
+                           WHEN 'graphic_designer' THEN 2 WHEN 'editor' THEN 3 ELSE 4 END, name`
     );
     const label: Record<string, string> = {
-      super_admin: 'Super Admin', admin: 'Admin', manager: 'Manager',
+      admin: 'Admin', manager: 'Manager',
       graphic_designer: 'Graphic Designer', editor: 'Video Editor', poster: 'Intern',
     };
     console.log('\nTeam accounts:');

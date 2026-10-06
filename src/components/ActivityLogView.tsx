@@ -114,8 +114,8 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs, allUsers
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">Activity</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Activity</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
             Everything that happened: content, uploads, downloads, reviews, posting and team changes.
           </p>
         </div>

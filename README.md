@@ -13,9 +13,8 @@ All permissions are strictly enforced on the server via session-based authentica
 
 | Role | Scope & Visibility | Capabilities |
 |---|---|---|
-| **Super Admin** | Full Platform & System Oversight | • View all content, calendar, analytics, and audit logs.<br>• Full User Management: Add, edit, deactivate, delete users, and reset/view encrypted credentials.<br>• Can delete wrongly created tasks.<br>• Manage workspace settings and system configuration. |
-| **Admin** | Full Operations & Content Management | • Full Content Management: Create, edit, reschedule, and delete content tasks.<br>• Assign creatives to Designers, Video Editors, and Interns.<br>• Resolve reported issues and request revisions.<br>• User Management: Add, edit, activate/deactivate team members (Managers, Designers, Editors, Interns), and reset user passwords.<br>• Cannot modify the Super Admin account. |
-| **Manager (DMM)** | Full Operations & Content Management | • Identical capabilities and permissions to Admin. |
+| **Admin** | Full Platform & Content Operations | • Full Content Management: Create, edit, reschedule, and delete content tasks.<br>• Assign creatives to Designers, Video Editors, and Interns.<br>• Resolve reported issues and request revisions.<br>• Full User Management: Add, edit, activate/deactivate team members (Managers, Designers, Editors, Interns), and reset user passwords.<br>• View all content, calendar, analytics, and audit logs.<br>• Manage workspace settings and system configuration. |
+| **Manager (DMM)** | Full Operations & Content Management | • Full Content Management: Create, edit, reschedule content tasks, assign team members, and resolve reported issues. |
 | **Graphic Designer** | Assigned Work Only | • Dedicated "My Active Work" queue.<br>• Start tasks, view briefs, instructions, hashtags, and reference links.<br>• Upload final creatives (JPG, PNG, WEBP, GIF, PDF, ZIP) and replace assets before publishing.<br>• Direct "Fix & Re-upload" resolution flow for reported issues. |
 | **Video Editor** | Assigned Work Only | • Dedicated "My Active Work" queue.<br>• High-speed chunked upload for large video files (MP4, MOV, MKV, etc.).<br>• Asset replacement, timeline notes, and direct "Fix & Re-upload" issue resolution. |
 | **Intern (Poster)** | Assigned Publishing Queue Only | • Focused "Ready to Post" queue with upcoming and overdue alerts.<br>• One-click asset preview and download.<br>• One-click copy for captions, hashtags, and instructions with instant copy feedback.<br>• Mark tasks as Posted with live social media URL validation.<br>• Report issues (wrong asset, typo, corrupt file) back to creator and admins. |
@@ -36,7 +35,7 @@ All permissions are strictly enforced on the server via session-based authentica
 ### 3. 🔒 Session Security & Inactivity Auto-Logout
 - **10-minute Inactivity Timer:** Automatically tracks user interactions (mouse, keyboard, scroll, touch) and warns users before auto-logging out to protect unattended workstations.
 - **Remember Email:** Optional local storage flag to prefill email on sign-in screens.
-- **Secure Password Vault:** Passwords encrypted using server vault keys; Super Admin audit logs track credential inspections.
+- **Secure Password Vault:** Passwords encrypted using server vault keys; Admin audit logs track credential inspections.
 
 ### 4. 🔄 End-to-End Issue Resolution Workflow
 - When an Intern flags an issue, the task status transitions to `ISSUE` and is surfaced with high priority in the assigned Graphic Designer's or Video Editor's dashboard with detailed issue notes and a 1-click **"Fix & Re-upload"** action.
@@ -45,11 +44,10 @@ All permissions are strictly enforced on the server via session-based authentica
 
 ## 👥 Initial Seeded Team Accounts
 
-> **Note:** Initial team accounts are automatically provisioned in the database upon startup. Account passwords and roles can be managed directly by Admins/Super Admin via the Team Management interface.
+> **Note:** Initial team accounts are automatically provisioned in the database upon startup. Account passwords and roles can be managed directly by Admins via the Team Management interface.
 
 | Role | Name | Email |
 |---|---|---|
-| **Super Admin** | Super Admin | `superadmin@gmail.com` |
 | **Admin** | Quickupp CMO | `quickuppsoftech.cmo@gmail.com` |
 | **Admin** | Snehal Pawar | `snehalpawar12014@gmail.com` |
 | **Graphic Designer** | Devyani Ankush Bhoye | `qs.graphicdesingner@gmail.com` |
@@ -80,8 +78,6 @@ Create or verify your `.env` file in the project root:
 ```env
 PORT=3000
 DATABASE_URL=postgresql://<username>:<password>@localhost:5432/<database_name>
-SUPER_ADMIN_EMAIL=superadmin@gmail.com
-SUPER_ADMIN_PASSWORD=<your_super_admin_password>
 TEAM_DEFAULT_PASSWORD=<your_team_default_password>
 ```
 
@@ -135,7 +131,6 @@ npm run db:check
 │   ├── App.tsx                # Main routing, role views, 10-minute inactivity watcher
 │   ├── components/
 │   │   ├── AdminDashboard.tsx      # Admin & Manager content hub
-│   │   ├── SuperAdminDashboard.tsx # Super Admin oversight dashboard
 │   │   ├── EditorDashboard.tsx     # Graphic Designer & Video Editor workspace
 │   │   ├── PosterDashboard.tsx     # Intern publishing queue
 │   │   ├── ContentDetailModal.tsx  # Task inspection, editing, and deletion

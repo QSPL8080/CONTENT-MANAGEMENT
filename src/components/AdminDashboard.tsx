@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 
 interface AdminDashboardProps {
-  /** False for the Super Admin (oversight only): hides create/calendar shortcuts. */
   canCreate?: boolean;
   metrics: OperationalMetrics | null;
   contentList: ContentItem[];
