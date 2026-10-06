@@ -395,10 +395,8 @@ export const Topbar: React.FC<TopbarProps> = ({
                   <div className="flex items-center justify-between py-1">
                     <span className="text-slate-500 font-medium">Access Scope:</span>
                     <span className="font-medium text-slate-800 text-right">
-                      {currentUser.role === 'super_admin'
-                        ? 'Dashboard, users & settings'
-                        : currentUser.role === 'admin'
-                        ? 'All content & assignments'
+                      {currentUser.role === 'super_admin' || currentUser.role === 'admin'
+                        ? 'Dashboard, content, users & settings'
                         : currentUser.role === 'manager'
                         ? 'All content & assignments'
                         : currentUser.role === 'graphic_designer'

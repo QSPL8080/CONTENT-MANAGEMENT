@@ -1,6 +1,6 @@
 import React from 'react';
 import { User, UserRole, OperationalMetrics } from '../types';
-import { canManageTeam, isManagerial, isCreator, roleLabel, ROLE_BADGE_CLASSES } from '../lib/roles';
+import { canManageTeam, isManagerial, isCreator, isPoster, roleLabel, ROLE_BADGE_CLASSES } from '../lib/roles';
 import { UserAvatar } from './UserAvatar';
 import { 
   LayoutDashboard, 

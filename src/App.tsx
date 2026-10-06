@@ -156,6 +156,55 @@ export default function App() {
     }
   }, [loadInitialData]);
 
+  // ── Auto-logout after 10 minutes of inactivity ──────────────────────────
+  const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  const lastActivityRef = React.useRef<number>(Date.now());
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    lastActivityRef.current = Date.now();
+
+    let throttleTimer: any = null;
+    const handleUserActivity = () => {
+      const now = Date.now();
+      if (!throttleTimer && now - lastActivityRef.current > 1000) {
+        lastActivityRef.current = now;
+        throttleTimer = setTimeout(() => {
+          throttleTimer = null;
+        }, 1000);
+      }
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'];
+    events.forEach(ev => window.addEventListener(ev, handleUserActivity, { passive: true }));
+
+    const checkInactivity = () => {
+      if (Date.now() - lastActivityRef.current >= INACTIVITY_TIMEOUT_MS) {
+        api.logout().catch(() => {});
+        resetToSignedOut('You were automatically logged out after 10 minutes of inactivity.');
+      }
+    };
+
+    const intervalId = setInterval(checkInactivity, 5000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkInactivity();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      events.forEach(ev => window.removeEventListener(ev, handleUserActivity));
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+      if (throttleTimer) clearTimeout(throttleTimer);
+    };
+  }, [currentUser, resetToSignedOut]);
+
   // Real-time Global Workflow Notification Listener:
   // Polls server every 3s. Whenever any task is published, completed, reviewed & flagged for revision,
   // an issue reported, or assigned, it triggers a screen pop-up, melodic chime, and visual toast for all persons.
@@ -241,6 +290,7 @@ export default function App() {
 
   // Called by the sign-in screen after a successful sign-in
   const handleSignedIn = useCallback(async (user: User) => {
+    lastActivityRef.current = Date.now();
     setAuthNotice(null);
     setCurrentUser(user);
     setRealUser(user);
@@ -663,7 +713,7 @@ export default function App() {
           activityLogs={activityLogs.filter(l => l.content_id === selectedContent.id)}
           issues={issues.filter(i => i.content_id === selectedContent.id)}
           onUploadVideo={handleUploadVideo}
-          onAttachSampleVideo={currentUser.role === 'super_admin' ? handleAttachSampleVideo : undefined}
+          onAttachSampleVideo={currentUser.role === 'admin' ? handleAttachSampleVideo : undefined}
           onMarkPostedClick={() => setPostingModalContent(selectedContent)}
           onRequestRevisionClick={() => setRevisionModalContent(selectedContent)}
           onReportIssueClick={() => setIssueModalContent(selectedContent)}
