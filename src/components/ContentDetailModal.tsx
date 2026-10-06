@@ -10,7 +10,7 @@ import {
 import { StatusBadge, OverdueBadge } from './StatusBadge';
 import { PlatformBadge, ContentTypeBadge } from './PlatformBadge';
 import { UserAvatar } from './UserAvatar';
-import { isManagerial, isCreator, isPoster, roleLabel, canManageContent } from '../lib/roles';
+import { isManagerial, isCreator, isPoster, roleLabel, canManageContent, canDeleteContent } from '../lib/roles';
 import { 
   X, 
   Download, 
@@ -140,8 +140,9 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
     (content.status === 'EDITING' || content.status === 'PLANNED') &&
     content.scheduled_date < todayStr;
 
-  // Admins edit and manage content; the Super Admin sees everything but is view-only
+  // Admins edit and manage content; Super Admin has oversight + task deletion
   const managerial = canManageContent(currentUser.role);
+  const canDelete = canDeleteContent(currentUser.role);
   const isOverseer = currentUser.role === 'super_admin';
   const isAssignedCreator = isCreator(currentUser.role) && currentUser.id === content.editor_id;
   const canUploadOrReplace = managerial || (isAssignedCreator && content.status !== 'POSTED');
@@ -904,41 +905,46 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                       )}
                     </div>
 
-                    {/* Admin management actions */}
-                    {managerial && (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {onEditClick && (
+                    {/* Management & Delete actions */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {managerial && onEditClick && (
+                        <button
+                          onClick={onEditClick}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      {managerial && (
+                        <>
                           <button
-                            onClick={onEditClick}
+                            onClick={onMoveDateClick}
                             className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
-                            <span>Edit</span>
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>Reschedule</span>
                           </button>
-                        )}
-                        <button
-                          onClick={onMoveDateClick}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200"
-                        >
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span>Reschedule</span>
-                        </button>
-                        <button
-                          onClick={onDuplicateClick}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200"
-                        >
-                          <CopyCheck className="w-3.5 h-3.5" />
-                          <span>Duplicate</span>
-                        </button>
+                          <button
+                            onClick={onDuplicateClick}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200"
+                          >
+                            <CopyCheck className="w-3.5 h-3.5" />
+                            <span>Duplicate</span>
+                          </button>
+                        </>
+                      )}
+                      {canDelete && (
                         <button
                           onClick={onDeleteClick}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 transition-colors"
+                          id="btn-delete-task"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete</span>
+                          <span>Delete Task</span>
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

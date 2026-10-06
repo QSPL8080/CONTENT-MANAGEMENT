@@ -19,6 +19,7 @@ import {
 import {
   isManagerial,
   canManageContent,
+  canDeleteContent,
   canManageTeam,
   canEditTeamInfo,
   ADMIN_EDITABLE_ROLES,
@@ -809,8 +810,8 @@ async function startServer() {
   }));
 
   app.delete('/api/content/:id', asyncHandler(async (req, res) => {
-    if (!canManageContent(req.user.role)) {
-      return res.status(403).json({ error: 'Only Admins and Managers can delete content.' });
+    if (!canDeleteContent(req.user.role)) {
+      return res.status(403).json({ error: 'Only Admins and Super Admins can delete content.' });
     }
     const success = await db.deleteContent(req.params.id, req.user);
     if (!success) return res.status(404).json({ error: 'Content not found' });

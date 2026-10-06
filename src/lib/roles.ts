@@ -78,6 +78,12 @@ export const ADMIN_EDITABLE_ROLES: UserRole[] = ALL_ROLES;
  */
 export const canManageContent = (role?: string | null): boolean => role === 'admin';
 
+/**
+ * Super Admin and Admin can delete content tasks if created incorrectly or needed to be removed.
+ */
+export const canDeleteContent = (role?: string | null): boolean =>
+  role === 'super_admin' || role === 'admin';
+
 /** Graphic Designers and Video Editors: produce and upload the final asset. */
 export const isCreator = (role?: string | null): boolean =>
   role === 'graphic_designer' || role === 'editor';
