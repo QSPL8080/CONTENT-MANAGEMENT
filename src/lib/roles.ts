@@ -20,8 +20,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  super_admin: 'Owner account — full control, including admins and settings',
-  admin: 'Full access — content, assignments, team and settings',
+  super_admin: 'Owner — oversees everything on the Dashboard; the only one who manages users and settings',
+  admin: 'Full content control — create, assign, review and publish (team managed by Super Admin)',
   manager: 'Creates, assigns and reviews content (no team or settings changes)',
   graphic_designer: 'Designs assigned posts and uploads final creatives',
   editor: 'Edits assigned videos and uploads final cuts',
@@ -56,9 +56,26 @@ export const isValidRole = (role: unknown): role is UserRole =>
 export const isManagerial = (role?: string | null): boolean =>
   role === 'super_admin' || role === 'admin' || role === 'manager';
 
-/** Super Admin and Admin: manage team members and workspace settings. */
-export const canManageTeam = (role?: string | null): boolean =>
-  role === 'super_admin' || role === 'admin';
+/**
+ * Only the Super Admin manages team members (every role, including Admins and Managers)
+ * (including their passwords) and workspace settings.
+ */
+export const canManageTeam = (role?: string | null): boolean => role === 'super_admin';
+
+/**
+ * Super Admin and Admin can edit team members' details (name, email, role).
+ * Only the Super Admin can add members, deactivate them or set passwords.
+ */
+export const canEditTeamInfo = (role?: string | null): boolean => role === 'super_admin' || role === 'admin';
+
+/** Roles an Admin may give to (non-admin) team members. */
+export const ADMIN_EDITABLE_ROLES: UserRole[] = ['manager', 'graphic_designer', 'editor', 'poster'];
+
+/**
+ * Admin and Manager: create, edit, assign, review and delete content.
+ * The Super Admin oversees (sees everything on the Dashboard) but does not edit content.
+ */
+export const canManageContent = (role?: string | null): boolean => role === 'admin' || role === 'manager';
 
 /** Graphic Designers and Video Editors: produce and upload the final asset. */
 export const isCreator = (role?: string | null): boolean =>
@@ -70,6 +87,7 @@ export const isPoster = (role?: string | null): boolean => role === 'poster';
 /** Which roles the acting user may assign to someone else. */
 export const assignableRoles = (actorRole?: string | null): UserRole[] => {
   if (actorRole === 'super_admin') return ALL_ROLES;
-  if (actorRole === 'admin') return ALL_ROLES.filter(r => r !== 'super_admin');
   return [];
 };
+
+

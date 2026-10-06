@@ -56,17 +56,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const getNavItems = () => {
     if (canManageTeam(currentRole)) {
-      // Super Admin & Admin
+      // Super Admin: oversight + user management only
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
-        { id: 'calendar', label: 'Content Calendar', icon: CalendarIcon, badge: null },
-        { id: 'content', label: 'All Content', icon: Film, badge: metrics?.total },
-        { id: 'team', label: 'Team', icon: Users, badge: null },
+        { id: 'team', label: 'Manage Users', icon: Users, badge: null },
         { id: 'activity', label: 'Activity', icon: Activity, badge: null },
         { id: 'settings', label: 'Settings', icon: Settings, badge: null },
       ];
     } else if (isManagerial(currentRole)) {
-      // Manager
+      // Admin & Manager
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'calendar', label: 'Content Calendar', icon: CalendarIcon, badge: null },

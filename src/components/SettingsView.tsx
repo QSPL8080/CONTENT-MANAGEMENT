@@ -94,7 +94,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
     'w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none disabled:opacity-60';
 
   return (
-    <form onSubmit={handleSave} className="space-y-6 w-full max-w-3xl">
+    <form onSubmit={handleSave} className="space-y-6 w-full">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Settings</h1>
@@ -116,53 +116,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
         <div className="p-3 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg" role="alert">{saveError}</div>
       )}
 
-      <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400" /> Workspace</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="set-name" className="block text-xs font-semibold text-slate-700 mb-1.5">Workspace name</label>
-            <input
-              id="set-name"
-              type="text"
-              disabled={!canEdit}
-              value={settings.workspace_name}
-              onChange={(e) => set('workspace_name', e.target.value)}
-              className={inputCls}
-            />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4 h-full">
+          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400" /> Workspace</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="set-name" className="block text-xs font-semibold text-slate-700 mb-1.5">Workspace name</label>
+              <input
+                id="set-name"
+                type="text"
+                disabled={!canEdit}
+                value={settings.workspace_name}
+                onChange={(e) => set('workspace_name', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label htmlFor="set-tz" className="block text-xs font-semibold text-slate-700 mb-1.5">Default timezone</label>
+              <select
+                id="set-tz"
+                disabled={!canEdit}
+                value={settings.default_timezone}
+                onChange={(e) => set('default_timezone', e.target.value)}
+                className={inputCls}
+              >
+                {(TIMEZONES.includes(settings.default_timezone) ? TIMEZONES : [settings.default_timezone, ...TIMEZONES]).map(tz => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">Used for "today" and overdue checks on the server.</p>
+            </div>
           </div>
+        </section>
+
+        <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4 h-full">
+          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Share2 className="w-4 h-4 text-slate-400" /> Publishing</h3>
           <div>
-            <label htmlFor="set-tz" className="block text-xs font-semibold text-slate-700 mb-1.5">Default timezone</label>
+            <label htmlFor="set-platform" className="block text-xs font-semibold text-slate-700 mb-1.5">Default posting platform</label>
             <select
-              id="set-tz"
+              id="set-platform"
               disabled={!canEdit}
-              value={settings.default_timezone}
-              onChange={(e) => set('default_timezone', e.target.value)}
+              value={settings.default_platform}
+              onChange={(e) => set('default_platform', e.target.value as Platform)}
               className={inputCls}
             >
-              {(TIMEZONES.includes(settings.default_timezone) ? TIMEZONES : [settings.default_timezone, ...TIMEZONES]).map(tz => (
-                <option key={tz} value={tz}>{tz}</option>
-              ))}
+              {PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
-            <p className="text-[11px] text-slate-400 mt-1">Used for "today" and overdue checks on the server.</p>
           </div>
-        </div>
-      </section>
-
-      <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Share2 className="w-4 h-4 text-slate-400" /> Publishing</h3>
-        <div className="sm:w-1/2">
-          <label htmlFor="set-platform" className="block text-xs font-semibold text-slate-700 mb-1.5">Default posting platform</label>
-          <select
-            id="set-platform"
-            disabled={!canEdit}
-            value={settings.default_platform}
-            onChange={(e) => set('default_platform', e.target.value as Platform)}
-            className={inputCls}
-          >
-            {PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
         <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-slate-400" /> Permissions &amp; notifications</h3>
@@ -195,7 +197,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
       </section>
 
       {!canEdit && (
-        <p className="text-xs text-slate-500">Only Admins can change settings.</p>
+        <p className="text-xs text-slate-500">Only the Super Admin can change settings.</p>
       )}
     </form>
   );

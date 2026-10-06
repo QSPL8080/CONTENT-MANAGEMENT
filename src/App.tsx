@@ -11,8 +11,9 @@ import {
   IssueType
 } from './types';
 import { api, onUnauthorized } from './lib/api';
-import { isManagerial, isCreator, isPoster, roleLabel } from './lib/roles';
+import { isManagerial, isCreator, isPoster, roleLabel, canManageContent } from './lib/roles';
 import { LoginScreen } from './components/LoginScreen';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { ContentFlowLogo } from './components/Logo';
 import { Topbar } from './components/Topbar';
 import { Sidebar, NavTab } from './components/Sidebar';
@@ -37,7 +38,7 @@ import {
   registerNotificationServiceWorker,
   requestBrowserNotificationPermission
 } from './lib/notificationService';
-import { Loader2, ShieldAlert, BellRing, Eye } from 'lucide-react';
+import { Loader2, ShieldAlert, BellRing } from 'lucide-react';
 
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
@@ -55,10 +56,9 @@ export default function App() {
 
   // Auth state
   const [realUser, setRealUser] = useState<User | null>(null);
-  const [actingAs, setActingAs] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<ContentItem | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Track known notifications so we only trigger chime on new arrivals
   const knownNotificationIdsRef = React.useRef<Set<string>>(new Set());
@@ -97,7 +97,6 @@ export default function App() {
   const resetToSignedOut = useCallback((notice?: string) => {
     setCurrentUser(null);
     setRealUser(null);
-    setActingAs(false);
     setSelectedContent(null);
     setContentList([]);
     setUsers([]);
@@ -112,13 +111,10 @@ export default function App() {
   // Initial Load: restore the session from the httpOnly cookie, if any
   const loadInitialData = useCallback(async () => {
     try {
-      const config = await api.getAuthConfig().catch(() => ({ googleClientId: null, workspaceName: 'ContentFlow' }));
-      setGoogleClientId(config.googleClientId);
       try {
         const me = await api.getMe();
         setCurrentUser(me.user);
-        setRealUser(me.realUser);
-        setActingAs(me.actingAs);
+        setRealUser(me.user);
         await loadWorkspaceData();
       } catch {
         setCurrentUser(null); // not signed in
@@ -243,12 +239,11 @@ export default function App() {
     }
   };
 
-  // Called by the sign-in screen after a successful Google or password sign-in
+  // Called by the sign-in screen after a successful sign-in
   const handleSignedIn = useCallback(async (user: User) => {
     setAuthNotice(null);
     setCurrentUser(user);
     setRealUser(user);
-    setActingAs(false);
     setCurrentTab('dashboard');
     try {
       await loadWorkspaceData();
@@ -264,20 +259,6 @@ export default function App() {
       console.error('Logout error:', err);
     }
     resetToSignedOut();
-  };
-
-  // Super Admin: preview the app as another team member (read-only), or exit preview
-  const handleViewAs = async (userId: string) => {
-    try {
-      const res = await api.viewAs(userId);
-      setCurrentUser(res.user);
-      setActingAs(res.actingAs);
-      setSelectedContent(null);
-      setCurrentTab('dashboard');
-      await loadWorkspaceData();
-    } catch (err: any) {
-      alert(err.message || 'Could not switch view');
-    }
   };
 
   // Content Operations Handlers
@@ -427,7 +408,6 @@ export default function App() {
   if (!currentUser) {
     return (
       <LoginScreen
-        googleClientId={googleClientId}
         onSignedIn={handleSignedIn}
         notice={authNotice}
       />
@@ -445,9 +425,7 @@ export default function App() {
         currentUser={currentUser}
         allUsers={users}
         notifications={notifications}
-        realUser={realUser}
-        actingAs={actingAs}
-        onViewAs={handleViewAs}
+        onChangePassword={() => setShowChangePassword(true)}
         onLogout={handleLogout}
         onMarkNotificationRead={async (id) => {
           await api.markNotificationRead(id);
@@ -509,28 +487,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Super Admin preview banner */}
-      {actingAs && realUser && (
-        <div className="bg-indigo-50/95 border-b border-indigo-200 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-indigo-950 sticky top-[57px] z-20 backdrop-blur">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="p-1 rounded-md bg-indigo-200/80 text-indigo-900 shrink-0">
-              <Eye className="w-3.5 h-3.5" />
-            </span>
-            <span className="truncate">
-              <strong>Preview mode:</strong> you are seeing ContentFlow exactly as <u>{currentUser.name}</u> ({roleLabel(currentUser.role)}) sees it. Read-only.
-            </span>
-          </div>
-          <button
-            onClick={() => handleViewAs('')}
-            className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold transition-colors shrink-0"
-          >
-            Exit preview
-          </button>
-        </div>
-      )}
-
       {/* Role scope banner for non-managers */}
-      {!actingAs && !managerial && (
+      {!managerial && (
         <div className="border-b border-amber-300/80 px-4 sm:px-6 py-2.5 flex items-center gap-3 text-xs text-amber-950 sticky top-[57px] z-20 backdrop-blur bg-amber-50/95">
           <span className="p-1 rounded-md bg-amber-200/80 text-amber-900 shrink-0">
             <ShieldAlert className="w-3.5 h-3.5" />
@@ -573,6 +531,7 @@ export default function App() {
           {/* TAB 1: DASHBOARD (Adapts to Role) */}
           {currentTab === 'dashboard' && managerial && (
             <AdminDashboard
+              canCreate={canManageContent(currentUser.role)}
               metrics={metrics}
               contentList={displayedContent}
               allUsers={users}
@@ -628,6 +587,7 @@ export default function App() {
           {/* TAB 3: CONTENT REPOSITORY (Admin View of all content) */}
           {currentTab === 'content' && managerial && (
             <AdminDashboard
+              canCreate={canManageContent(currentUser.role)}
               metrics={metrics}
               contentList={displayedContent}
               allUsers={users}
@@ -726,6 +686,21 @@ export default function App() {
           defaultDate={createDefaultDate}
           defaultContentType={createDefaultContentType}
           onCreate={handleCreateContent}
+        />
+      )}
+
+      {/* Change own password (profile menu) */}
+      {showChangePassword && (
+        <ChangePasswordModal
+          forced={false}
+          userName={`${currentUser.name} · ${currentUser.email}`}
+          onClose={() => setShowChangePassword(false)}
+          onChanged={(u) => {
+            setShowChangePassword(false);
+            setCurrentUser(u);
+            setRealUser(u);
+          }}
+          onLogout={handleLogout}
         />
       )}
 

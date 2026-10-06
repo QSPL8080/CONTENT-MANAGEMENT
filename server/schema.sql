@@ -1,6 +1,15 @@
 -- ContentFlow PostgreSQL schema (reference copy).
--- You do NOT need to run this by hand: the server applies it automatically on start
--- (server/db.ts → init), creates the Super Admin and seeds the team roster (server/team.ts).
+-- You do NOT need to run this by hand: on start the server creates the database
+-- (default name: content_management) if it is missing, applies this schema, creates the
+-- Super Admin and the team list (server/team.ts). See README.md.
+
+-- SRS 7.5: Workspace → Users → Content → Calendar (v1 runs one workspace: 'default')
+CREATE TABLE IF NOT EXISTS workspaces (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO workspaces (id, name) VALUES ('default', 'Quickupp Softech') ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS users (
   id             TEXT PRIMARY KEY,
@@ -111,8 +120,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAULT 'default';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enc TEXT;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS credentials_version INT NOT NULL DEFAULT 0;
 ALTER TABLE content_items ADD COLUMN IF NOT EXISTS editor_notes TEXT;
 ALTER TABLE content_items ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAULT 'default';
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_workspace_fk') THEN ALTER TABLE users ADD CONSTRAINT users_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_workspace_fk') THEN ALTER TABLE content_items ADD CONSTRAINT content_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
 
 -- Role list: super_admin, admin, manager, graphic_designer, editor (video editor), poster (intern)
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;

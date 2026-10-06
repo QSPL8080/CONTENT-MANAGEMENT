@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 
 interface AdminDashboardProps {
+  /** False for the Super Admin (oversight only): hides create/calendar shortcuts. */
+  canCreate?: boolean;
   metrics: OperationalMetrics | null;
   contentList: ContentItem[];
   allUsers: User[];
@@ -38,6 +40,7 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  canCreate = true,
   metrics: metricsProp,
   contentList,
   allUsers,
@@ -109,6 +112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
+        {canCreate && (
         <div className="flex items-center gap-3">
           <button
             onClick={onNavigateToCalendar}
@@ -126,6 +130,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>Create Content</span>
           </button>
         </div>
+        )}
       </div>
 
       {/* Top Metrics Cards with Spacious Design */}

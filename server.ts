@@ -12,14 +12,16 @@ import {
   clearSessionCookie,
   newSessionToken,
   hashToken,
-  verifyGoogleIdToken,
   tooManyAttempts,
   recordFailedAttempt,
   clearAttempts,
 } from './server/auth';
 import {
   isManagerial,
+  canManageContent,
   canManageTeam,
+  canEditTeamInfo,
+  ADMIN_EDITABLE_ROLES,
   isCreator,
   isPoster,
   isValidRole,
@@ -30,12 +32,6 @@ import type { ContentItem, ContentStatus, User, Platform } from './src/types';
 
 const PORT = Number(process.env.PORT || 3000);
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
-
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-
 // Express request augmented with the signed-in user
 interface AuthedRequest extends Request {
   user: User;
@@ -125,7 +121,8 @@ function canViewContent(user: User, item: ContentItem) {
 }
 
 async function canUploadFinal(user: User, item: ContentItem): Promise<string | null> {
-  if (isManagerial(user.role)) return null;
+  if (canManageContent(user.role)) return null;
+  if (user.role === 'super_admin') return 'The Super Admin account is for oversight — content is handled by Admins and Managers.';
   if (!isCreator(user.role) || item.editor_id !== user.id) {
     return 'Only the assigned Graphic Designer / Video Editor (or an Admin/Manager) can upload the final file.';
   }
@@ -138,7 +135,7 @@ async function canUploadFinal(user: User, item: ContentItem): Promise<string | n
 }
 
 function canMarkPosted(user: User, item: ContentItem) {
-  return isManagerial(user.role) || (isPoster(user.role) && item.poster_id === user.id);
+  return canManageContent(user.role) || (isPoster(user.role) && item.poster_id === user.id);
 }
 
 const asyncHandler =
@@ -169,19 +166,16 @@ async function startServer() {
 
   app.get('/api/auth/config', asyncHandler(async (_req, res) => {
     const settings = await db.getSettings();
-    res.json({
-      googleClientId: GOOGLE_CLIENT_ID || null,
-      workspaceName: settings.workspace_name,
-    });
+    res.json({ workspaceName: settings.workspace_name });
   }));
 
-  async function startSession(req: Request, res: Response, user: User, method: 'password' | 'google') {
+  async function startSession(req: Request, res: Response, user: User, method: 'password') {
     const { token, hash } = newSessionToken();
     await db.createSession(hash, user.id, method, SESSION_TTL_DAYS);
     setSessionCookie(req, res, token);
   }
 
-  // Email + password (Super Admin, or anyone an admin gave a password)
+  // Email + password sign-in. Only accounts the Super Admin has created (and given a password) can get in.
   app.post('/api/auth/login', asyncHandler(async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
@@ -198,56 +192,17 @@ async function startServer() {
       recordFailedAttempt(limiterKey);
       const exists = await db.getUserByEmail(email);
       if (exists && !exists.password_hash) {
-        return res.status(401).json({ error: 'This account signs in with Google. Use "Continue with Google".' });
+        return res.status(401).json({ error: 'Your password has not been set yet. Ask the Super Admin to set it.' });
       }
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     if (user.status !== 'active') {
-      return res.status(403).json({ error: 'This account has been disabled. Contact your admin.' });
+      return res.status(403).json({ error: 'This account has been deactivated. Contact the Super Admin.' });
     }
     clearAttempts(limiterKey);
     await startSession(req, res, user, 'password');
     await db.touchLastLogin(user.id);
     res.json({ success: true, user: publicUser(user) });
-  }));
-
-  // "Continue with Google" — only emails present (and active) in the team list may sign in
-  app.post('/api/auth/google', asyncHandler(async (req, res) => {
-    if (!GOOGLE_CLIENT_ID) {
-      return res.status(503).json({ error: 'Google sign-in is not configured on the server (GOOGLE_CLIENT_ID is missing).' });
-    }
-    const credential = String(req.body?.credential || '');
-    if (!credential) return res.status(400).json({ error: 'Missing Google credential' });
-
-    const limiterKey = `google:${req.ip}`;
-    if (tooManyAttempts(limiterKey)) {
-      return res.status(429).json({ error: 'Too many sign-in attempts. Please wait 15 minutes and try again.' });
-    }
-
-    let identity;
-    try {
-      identity = await verifyGoogleIdToken(credential, GOOGLE_CLIENT_ID);
-    } catch (err: any) {
-      recordFailedAttempt(limiterKey);
-      return res.status(401).json({ error: `Google sign-in failed: ${err.message}` });
-    }
-
-    const user = await db.getUserByEmail(identity.email);
-    if (!user) {
-      recordFailedAttempt(limiterKey);
-      return res.status(403).json({
-        error: `${identity.email} is not on the ContentFlow team list. Ask an Admin to add this email on the Team page.`,
-      });
-    }
-    if (user.status !== 'active') {
-      return res.status(403).json({ error: 'This account has been disabled. Contact your admin.' });
-    }
-    clearAttempts(limiterKey);
-    const { password_hash, ...safeUser } = user;
-    await startSession(req, res, safeUser, 'google');
-    await db.touchLastLogin(user.id, identity.picture);
-    const fresh = await db.getUserById(user.id);
-    res.json({ success: true, user: fresh });
   }));
 
   app.post('/api/auth/logout', asyncHandler(async (req, res) => {
@@ -273,37 +228,38 @@ async function startServer() {
     req.user = session.user;
     req.session = { ...session, tokenHash };
 
-    // "View as" preview (Super Admin) is read-only
-    if (session.actingAs && req.method !== 'GET' && !req.path.startsWith('/auth/') && !req.path.startsWith('/notifications')) {
-      return res.status(403).json({
-        error: `You are previewing as ${session.user.name}. Preview mode is read-only — exit preview to make changes.`,
-      });
-    }
     next();
   }));
 
-  app.get('/api/auth/me', asyncHandler(async (req, res) => {
-    res.json({
-      user: req.user,
-      realUser: req.session.realUser,
-      actingAs: req.session.actingAs,
+  // Any signed-in user changes their OWN password (needs the current one)
+  app.post('/api/auth/change-password', asyncHandler(async (req, res) => {
+    const user = req.session.realUser;
+    const current = String(req.body?.current_password || '');
+    const next = String(req.body?.new_password || '');
+    const limiterKey = `chpw:${user.id}`;
+    if (tooManyAttempts(limiterKey)) {
+      return res.status(429).json({ error: 'Too many attempts. Please wait 15 minutes and try again.' });
+    }
+    if (!(await db.checkPassword(user.id, current))) {
+      recordFailedAttempt(limiterKey);
+      return res.status(400).json({ error: 'Your current password is not correct.' });
+    }
+    if (next.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    if (next === current) return res.status(400).json({ error: 'New password must be different from the current one.' });
+    clearAttempts(limiterKey);
+    const updated = await db.updateUser(user.id, { password: next, must_change_password: false });
+    // Sign out this account everywhere else; keep the current device signed in
+    await db.deleteSessionsForUser(user.id, req.session.tokenHash);
+    await db.logActivity({
+      user_id: user.id, user_name: user.name, user_role: user.role,
+      action: 'password_changed',
+      description: `${user.name} changed their password.`,
     });
+    res.json({ success: true, user: updated });
   }));
 
-  // Super Admin: preview the app as another team member (read-only)
-  app.post('/api/auth/view-as', asyncHandler(async (req, res) => {
-    if (req.session.realUser.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only the Super Admin can preview as another user.' });
-    }
-    const targetId = String(req.body?.userId || '');
-    if (!targetId || targetId === req.session.realUser.id) {
-      await db.setSessionActingAs(req.session.tokenHash, null);
-      return res.json({ success: true, user: req.session.realUser, actingAs: false });
-    }
-    const target = await db.getUserById(targetId);
-    if (!target) return res.status(404).json({ error: 'User not found' });
-    await db.setSessionActingAs(req.session.tokenHash, target.id);
-    res.json({ success: true, user: target, actingAs: true });
+  app.get('/api/auth/me', asyncHandler(async (req, res) => {
+    res.json({ user: req.user });
   }));
 
   // -------------------------------------------------------------------------
@@ -316,12 +272,12 @@ async function startServer() {
   app.post('/api/users', asyncHandler(async (req, res) => {
     const actor = req.user;
     if (!canManageTeam(actor.role)) {
-      return res.status(403).json({ error: 'Only Admins can add team members.' });
+      return res.status(403).json({ error: 'Only the Super Admin can add team members.' });
     }
     const name = String(req.body?.name || '').trim();
     const email = String(req.body?.email || '').trim().toLowerCase();
     const role = req.body?.role;
-    const password = req.body?.password ? String(req.body.password) : undefined;
+    const password = req.body?.password ? String(req.body.password) : '';
     if (!name || !email || !role) {
       return res.status(400).json({ error: 'Name, email, and role are required' });
     }
@@ -331,11 +287,11 @@ async function startServer() {
     if (!isValidRole(role) || !assignableRoles(actor.role).includes(role)) {
       return res.status(403).json({ error: `You cannot create a ${roleLabel(role)} account.` });
     }
-    if (password && password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
     if (await db.getUserByEmail(email)) {
       return res.status(409).json({ error: `${email} is already on the team.` });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Set a password of at least 8 characters for this member' });
     }
     const newUser = await db.createUser({ name, email, role, password, status: 'active' });
     await db.logActivity({
@@ -346,13 +302,49 @@ async function startServer() {
     res.status(201).json({ user: newUser });
   }));
 
-  app.patch('/api/users/:id', asyncHandler(async (req, res) => {
-    const actor = req.user;
-    if (!canManageTeam(actor.role)) {
-      return res.status(403).json({ error: 'Only Admins can modify team members.' });
+  // Super Admin: see a member's CURRENT password (kept in sync when they change it). Logged.
+  app.get('/api/users/:id/password', asyncHandler(async (req, res) => {
+    if (!canManageTeam(req.user.role)) {
+      return res.status(403).json({ error: 'Only the Super Admin can view passwords.' });
     }
     const target = await db.getUserById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
+    const password = await db.revealPassword(target.id);
+    res.setHeader('Cache-Control', 'no-store');
+    if (password === null) {
+      return res.status(404).json({ error: 'This password cannot be shown. Set a new one with the edit button.' });
+    }
+    await db.logActivity({
+      user_id: req.user.id, user_name: req.user.name, user_role: req.user.role,
+      action: 'password_viewed',
+      description: `${req.user.name} viewed ${target.name}'s password.`,
+    });
+    res.json({ password });
+  }));
+
+  app.patch('/api/users/:id', asyncHandler(async (req, res) => {
+    const actor = req.user;
+    if (!canEditTeamInfo(actor.role)) {
+      return res.status(403).json({ error: 'Only the Super Admin and Admins can edit team members.' });
+    }
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    // Admins: may edit name, email and role of non-admin members only. No deactivating, no passwords.
+    if (actor.role === 'admin') {
+      if (target.role === 'super_admin' || target.role === 'admin') {
+        return res.status(403).json({ error: 'Admins cannot edit Admin or Super Admin accounts.' });
+      }
+      if (req.body.status !== undefined && req.body.status !== target.status) {
+        return res.status(403).json({ error: 'Only the Super Admin can activate or deactivate members.' });
+      }
+      if (req.body.password) {
+        return res.status(403).json({ error: 'Only the Super Admin can change team passwords.' });
+      }
+      if (req.body.role !== undefined && req.body.role !== target.role && !ADMIN_EDITABLE_ROLES.includes(req.body.role)) {
+        return res.status(403).json({ error: `Admins cannot assign the ${roleLabel(req.body.role)} role.` });
+      }
+    }
 
     if (target.role === 'super_admin' && actor.role !== 'super_admin') {
       return res.status(403).json({ error: 'Only the Super Admin can change a Super Admin account.' });
@@ -380,7 +372,8 @@ async function startServer() {
       if (target.id === actor.id) {
         return res.status(400).json({ error: 'You cannot change your own role.' });
       }
-      if (!isValidRole(role) || !assignableRoles(actor.role).includes(role)) {
+      const allowed = actor.role === 'admin' ? ADMIN_EDITABLE_ROLES : assignableRoles(actor.role);
+      if (!isValidRole(role) || !allowed.includes(role)) {
         return res.status(403).json({ error: `You cannot assign the ${roleLabel(role)} role.` });
       }
       updates.role = role;
@@ -412,13 +405,13 @@ async function startServer() {
     const updated = await db.updateUser(target.id, updates);
     if (!updated) return res.status(404).json({ error: 'User not found' });
 
-    if (updates.status === 'disabled') {
+    if (updates.status === 'disabled' || (updates.password && target.id !== actor.id)) {
       await db.deleteSessionsForUser(target.id); // signed out everywhere immediately
     }
 
     const changes: string[] = [];
     if (updates.role) changes.push(`role → ${roleLabel(updates.role)}`);
-    if (updates.status) changes.push(updates.status === 'disabled' ? 'disabled the account' : 're-enabled the account');
+    if (updates.status) changes.push(updates.status === 'disabled' ? 'deactivated the account' : 'activated the account');
     if (updates.email) changes.push(`email → ${updates.email}`);
     if (updates.name) changes.push(`name → ${updates.name}`);
     if (updates.password) changes.push('set a new password');
@@ -480,7 +473,7 @@ async function startServer() {
 
   app.post('/api/content', asyncHandler(async (req, res) => {
     const currentUser = req.user;
-    if (!isManagerial(currentUser.role)) {
+    if (!canManageContent(currentUser.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can create content.' });
     }
 
@@ -542,7 +535,10 @@ async function startServer() {
     const body = req.body || {};
     const attempted = Object.keys(body);
 
-    if (isManagerial(currentUser.role)) {
+    if (currentUser.role === 'super_admin') {
+      return res.status(403).json({ error: 'The Super Admin account is for oversight — content is edited by Admins and Managers.' });
+    }
+    if (canManageContent(currentUser.role)) {
       if (body.status !== undefined && !CONTENT_STATUSES.includes(body.status)) {
         return res.status(400).json({ error: 'Unknown status' });
       }
@@ -599,7 +595,7 @@ async function startServer() {
 
   // Demo calendar (Managers/Admins only)
   app.post('/api/content/seed-instagram-calendar', asyncHandler(async (req, res) => {
-    if (!isManagerial(req.user.role)) {
+    if (!canManageContent(req.user.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can load demo content.' });
     }
     const users = (await db.getUsers()).filter(u => u.status === 'active');
@@ -733,8 +729,8 @@ async function startServer() {
 
   // Demo sample clip (Super Admin only — so real tasks can't be "completed" with a sample)
   app.post('/api/content/:id/attach-sample-video', asyncHandler(async (req, res) => {
-    if (req.user.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only the Super Admin can attach demo sample videos.' });
+    if (!canManageContent(req.user.role)) {
+      return res.status(403).json({ error: 'Only Admins and Managers can attach demo sample videos.' });
     }
     const samples = ['sample-reel-1.mp4', 'sample-reel-2.mp4', 'sample-reel-3.mp4', 'sample-reel-4.mp4']
       .filter(f => fs.existsSync(path.join(UPLOADS_DIR, f)));
@@ -765,7 +761,7 @@ async function startServer() {
     if (item.status === 'POSTED') {
       return res.status(409).json({ error: 'This content is already marked as Posted.', content: item });
     }
-    if (!isManagerial(currentUser.role) && item.status !== 'READY_TO_POST') {
+    if (!canManageContent(currentUser.role) && item.status !== 'READY_TO_POST') {
       return res.status(400).json({ error: 'This content is not Ready to Post yet — the final file has not been uploaded.' });
     }
     const { post_url, posted_at, posting_notes, platform } = req.body || {};
@@ -790,7 +786,7 @@ async function startServer() {
 
   // Revision request (Admin/Manager)
   app.post('/api/content/:id/revision', asyncHandler(async (req, res) => {
-    if (!isManagerial(req.user.role)) {
+    if (!canManageContent(req.user.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can request revisions.' });
     }
     const notes = String(req.body?.notes || '').trim();
@@ -820,7 +816,7 @@ async function startServer() {
   }));
 
   app.post('/api/content/:id/duplicate', asyncHandler(async (req, res) => {
-    if (!isManagerial(req.user.role)) {
+    if (!canManageContent(req.user.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can duplicate content.' });
     }
     const duplicate = await db.duplicateContent(req.params.id, req.user);
@@ -829,7 +825,7 @@ async function startServer() {
   }));
 
   app.delete('/api/content/:id', asyncHandler(async (req, res) => {
-    if (!isManagerial(req.user.role)) {
+    if (!canManageContent(req.user.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can delete content.' });
     }
     const success = await db.deleteContent(req.params.id, req.user);
@@ -846,7 +842,7 @@ async function startServer() {
   }));
 
   app.patch('/api/issues/:id/resolve', asyncHandler(async (req, res) => {
-    if (!isManagerial(req.user.role)) {
+    if (!canManageContent(req.user.role)) {
       return res.status(403).json({ error: 'Only Admins and Managers can resolve issues.' });
     }
     const resolved = await db.resolveIssue(req.params.id, req.user);
@@ -894,12 +890,15 @@ async function startServer() {
   // -------------------------------------------------------------------------
   app.get('/api/settings', asyncHandler(async (_req, res) => {
     const settings = await db.getSettings();
-    res.json({ settings, now: nowInTimezone(settings.default_timezone) });
+    res.json({
+      settings,
+      now: nowInTimezone(settings.default_timezone),
+    });
   }));
 
   app.patch('/api/settings', asyncHandler(async (req, res) => {
     if (!canManageTeam(req.user.role)) {
-      return res.status(403).json({ error: 'Only Admins can update workspace settings.' });
+      return res.status(403).json({ error: 'Only the Super Admin can change workspace settings.' });
     }
     const body = req.body || {};
     const updates: Record<string, any> = {};
@@ -922,7 +921,6 @@ async function startServer() {
     }
     if (body.allow_editor_replace !== undefined) updates.allow_editor_replace = Boolean(body.allow_editor_replace);
     if (body.notification_email !== undefined) updates.notification_email = Boolean(body.notification_email);
-
     const updated = await db.updateSettings(updates);
     await db.logActivity({
       user_id: req.user.id, user_name: req.user.name, user_role: req.user.role,
@@ -1046,9 +1044,6 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`ContentFlow server running on http://localhost:${PORT}`);
-    if (!GOOGLE_CLIENT_ID) {
-      console.log('ℹ️  GOOGLE_CLIENT_ID is not set — "Continue with Google" is disabled until you add it to .env');
-    }
   });
 }
 

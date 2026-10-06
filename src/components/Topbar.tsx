@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, AppNotification } from '../types';
-import { isManagerial, isCreator, roleLabel, ROLE_BADGE_CLASSES, ROLE_DOT_CLASSES } from '../lib/roles';
+import { isManagerial, isCreator, roleLabel, canManageContent, ROLE_BADGE_CLASSES, ROLE_DOT_CLASSES } from '../lib/roles';
 import { UserAvatar } from './UserAvatar';
 import { ContentFlowLogo } from './Logo';
 import { 
@@ -20,7 +20,8 @@ import {
   Shield, 
   Send, 
   Rocket,
-  LogOut
+  LogOut,
+  KeyRound
 } from 'lucide-react';
 import { 
   playNotificationSound, 
@@ -32,9 +33,7 @@ import {
 interface TopbarProps {
   currentUser: User;
   allUsers: User[];
-  realUser: User | null;
-  actingAs: boolean;
-  onViewAs: (userId: string) => void;
+  onChangePassword?: () => void;
   onLogout?: () => void;
   onOpenCreateModal: () => void;
   notifications: AppNotification[];
@@ -49,9 +48,7 @@ interface TopbarProps {
 export const Topbar: React.FC<TopbarProps> = ({
   currentUser,
   allUsers,
-  realUser,
-  actingAs,
-  onViewAs,
+  onChangePassword,
   onLogout,
   onOpenCreateModal,
   notifications,
@@ -134,8 +131,6 @@ export const Topbar: React.FC<TopbarProps> = ({
       ? <Film className="w-3 h-3" />
       : <Send className="w-3 h-3" />,
   };
-  const [previewFilter, setPreviewFilter] = useState('');
-  const canPreview = realUser?.role === 'super_admin';
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 w-full">
@@ -186,7 +181,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {/* Right: Actions, Notifications, Role Switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {isManagerial(currentUser.role) && !actingAs && (
+          {canManageContent(currentUser.role) && (
             <button
               onClick={onOpenCreateModal}
               className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0"
@@ -386,8 +381,10 @@ export const Topbar: React.FC<TopbarProps> = ({
                   <div className="flex items-center justify-between py-1">
                     <span className="text-slate-500 font-medium">Access Scope:</span>
                     <span className="font-medium text-slate-800 text-right">
-                      {currentUser.role === 'super_admin' || currentUser.role === 'admin'
-                        ? 'Everything + Team & Settings'
+                      {currentUser.role === 'super_admin'
+                        ? 'Dashboard, users & settings'
+                        : currentUser.role === 'admin'
+                        ? 'All content & assignments'
                         : currentUser.role === 'manager'
                         ? 'All content & assignments'
                         : currentUser.role === 'graphic_designer'
@@ -399,54 +396,18 @@ export const Topbar: React.FC<TopbarProps> = ({
                   </div>
                 </div>
 
-                {/* Super Admin only: read-only preview as another team member */}
-                {canPreview && (
+                {onChangePassword && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                      Preview as team member
-                    </span>
-                    <p className="text-[10px] text-slate-400 mb-2">Read-only — see exactly what they see.</p>
-                    <input
-                      type="text"
-                      value={previewFilter}
-                      onChange={(e) => setPreviewFilter(e.target.value)}
-                      placeholder="Search name or role…"
-                      className="w-full mb-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-slate-400"
-                    />
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {allUsers
-                        .filter(u => u.status === 'active')
-                        .filter(u => {
-                          const f = previewFilter.trim().toLowerCase();
-                          return !f || u.name.toLowerCase().includes(f) || roleLabel(u.role).toLowerCase().includes(f);
-                        })
-                        .map((u) => {
-                          const isSelected = u.id === currentUser.id;
-                          return (
-                            <button
-                              key={u.id}
-                              onClick={() => {
-                                onViewAs(u.id === realUser?.id ? '' : u.id);
-                                setShowRoleMenu(false);
-                              }}
-                              className={`w-full flex items-center justify-between p-2 rounded-xl text-xs transition-colors ${
-                                isSelected ? 'bg-slate-100 font-bold text-slate-900' : 'hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <UserAvatar user={u} size="sm" />
-                                <div className="text-left truncate">
-                                  <div className="font-semibold text-slate-800 truncate">
-                                    {u.name}{u.id === realUser?.id ? ' (you)' : ''}
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 uppercase tracking-tight">{roleLabel(u.role)}</div>
-                                </div>
-                              </div>
-                              {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-                            </button>
-                          );
-                        })}
-                    </div>
+                    <button
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        onChangePassword();
+                      }}
+                      className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Change password</span>
+                    </button>
                   </div>
                 )}
 

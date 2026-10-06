@@ -51,7 +51,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     } catch {
       // fallback to status text
     }
-    if (response.status === 401 && !endpoint.startsWith('/api/auth/login') && !endpoint.startsWith('/api/auth/google')) {
+    // A 401 on the initial "am I signed in?" check just means "not signed in yet" — not a lost session
+    if (response.status === 401 && !endpoint.startsWith('/api/auth/login') && !endpoint.startsWith('/api/auth/me')) {
       unauthorizedHandler?.();
     }
     throw new ApiError(errorMsg, response.status);
@@ -63,27 +64,20 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const api = {
   // Auth
   getAuthConfig: () =>
-    request<{ googleClientId: string | null; workspaceName: string }>('/api/auth/config'),
+    request<{ workspaceName: string }>('/api/auth/config'),
   getMe: () =>
-    request<{ user: User; realUser: User; actingAs: boolean }>('/api/auth/me'),
+    request<{ user: User }>('/api/auth/me'),
   login: (credentials: { email: string; password: string }) =>
     request<{ success: boolean; user: User }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
-  loginWithGoogle: (credential: string) =>
-    request<{ success: boolean; user: User }>('/api/auth/google', {
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ success: boolean; user: User }>('/api/auth/change-password', {
       method: 'POST',
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify({ current_password, new_password }),
     }),
   logout: () => request<{ success: boolean }>('/api/auth/logout', { method: 'POST' }),
-  /** Super Admin only: preview the app as another user (read-only). Pass '' to exit. */
-  viewAs: (userId: string) =>
-    request<{ success: boolean; user: User; actingAs: boolean }>('/api/auth/view-as', {
-      method: 'POST',
-      body: JSON.stringify({ userId }),
-    }),
-
   // Users
   getUsers: () => request<{ users: User[] }>('/api/users'),
   createUser: (userData: Partial<User> & { password?: string }) => 
@@ -91,6 +85,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
+  revealPassword: (id: string) => request<{ password: string }>(`/api/users/${id}/password`),
   updateUser: (id: string, updates: Partial<User> & { password?: string }) =>
     request<{ user: User }>(`/api/users/${id}`, {
       method: 'PATCH',
@@ -226,7 +221,8 @@ export const api = {
     }),
 
   // Settings
-  getSettings: () => request<{ settings: WorkspaceSettings; now?: { date: string; time: string } }>('/api/settings'),
+  getSettings: () =>
+    request<{ settings: WorkspaceSettings; now?: { date: string; time: string }}>('/api/settings'),
   updateSettings: (settings: Partial<WorkspaceSettings>) =>
     request<{ settings: WorkspaceSettings }>('/api/settings', {
       method: 'PATCH',

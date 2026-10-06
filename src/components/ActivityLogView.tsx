@@ -1,21 +1,32 @@
 import React, { useState } from 'react';
 import { ActivityLog, User } from '../types';
 import { UserAvatar } from './UserAvatar';
-import { 
-  Activity, 
-  Filter, 
-  Clock, 
-  Search, 
-  Sparkles, 
-  UploadCloud, 
-  Download, 
-  Rocket, 
-  RotateCcw, 
-  AlertTriangle, 
+import { roleLabel } from '../lib/roles';
+import {
+  Activity,
+  Filter,
+  Clock,
+  Search,
+  Sparkles,
+  UploadCloud,
+  Download,
+  Rocket,
+  RotateCcw,
+  AlertTriangle,
   Calendar,
-  Layers,
   CheckCircle2,
-  X
+  X,
+  Pencil,
+  Copy,
+  Trash2,
+  UserPlus,
+  UserCog,
+  KeyRound,
+  Eye,
+  Settings,
+  Link2,
+  StickyNote,
+  type LucideIcon,
 } from 'lucide-react';
 
 interface ActivityLogViewProps {
@@ -23,147 +34,111 @@ interface ActivityLogViewProps {
   allUsers: User[];
 }
 
+type Group = 'content' | 'files' | 'posting' | 'review' | 'team';
+
+interface ActionInfo {
+  label: string;
+  icon: LucideIcon;
+  /** badge classes */
+  badge: string;
+  /** timeline dot */
+  dot: string;
+  group: Group;
+}
+
+// One entry per action the server records (server/db.ts + server.ts)
+const ACTIONS: Record<string, ActionInfo> = {
+  created_content:      { label: 'Content created',     icon: Sparkles,      badge: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-500', group: 'content' },
+  duplicated_content:   { label: 'Content duplicated',  icon: Copy,          badge: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-500', group: 'content' },
+  edited_content:       { label: 'Content edited',      icon: Pencil,        badge: 'bg-slate-100 text-slate-700 border-slate-200',     dot: 'bg-slate-500',  group: 'content' },
+  deleted_content:      { label: 'Content deleted',     icon: Trash2,        badge: 'bg-rose-50 text-rose-700 border-rose-200',         dot: 'bg-rose-500',   group: 'content' },
+  reassigned_creator:   { label: 'Reassigned',          icon: UserCog,       badge: 'bg-slate-100 text-slate-700 border-slate-200',     dot: 'bg-slate-500',  group: 'content' },
+  reassigned_poster:    { label: 'Reassigned',          icon: UserCog,       badge: 'bg-slate-100 text-slate-700 border-slate-200',     dot: 'bg-slate-500',  group: 'content' },
+  date_changed:         { label: 'Rescheduled',         icon: Calendar,      badge: 'bg-sky-50 text-sky-700 border-sky-200',            dot: 'bg-sky-500',    group: 'content' },
+  status_changed:       { label: 'Status changed',      icon: Activity,      badge: 'bg-indigo-50 text-indigo-700 border-indigo-200',   dot: 'bg-indigo-500', group: 'content' },
+  editor_notes:         { label: 'Notes updated',       icon: StickyNote,    badge: 'bg-slate-100 text-slate-700 border-slate-200',     dot: 'bg-slate-500',  group: 'content' },
+  uploaded_final_video: { label: 'File uploaded',       icon: UploadCloud,   badge: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500',   group: 'files' },
+  replaced_final_video: { label: 'File replaced',       icon: UploadCloud,   badge: 'bg-blue-50 text-blue-700 border-blue-200',         dot: 'bg-blue-500',   group: 'files' },
+  downloaded_video:     { label: 'File downloaded',     icon: Download,      badge: 'bg-cyan-50 text-cyan-700 border-cyan-200',         dot: 'bg-cyan-500',   group: 'files' },
+  marked_posted:        { label: 'Posted',              icon: Rocket,        badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', group: 'posting' },
+  added_post_url:       { label: 'Post link added',     icon: Link2,         badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', group: 'posting' },
+  revision_requested:   { label: 'Revision requested',  icon: RotateCcw,     badge: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500',  group: 'review' },
+  reported_issue:       { label: 'Issue reported',      icon: AlertTriangle, badge: 'bg-rose-50 text-rose-700 border-rose-200',         dot: 'bg-rose-500',   group: 'review' },
+  resolved_issue:       { label: 'Issue resolved',      icon: CheckCircle2,  badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', group: 'review' },
+  user_added:           { label: 'User added',          icon: UserPlus,      badge: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500', group: 'team' },
+  user_updated:         { label: 'User updated',        icon: UserCog,       badge: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500', group: 'team' },
+  password_changed:     { label: 'Password changed',    icon: KeyRound,      badge: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500', group: 'team' },
+  password_viewed:      { label: 'Password viewed',     icon: Eye,           badge: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500', group: 'team' },
+  settings_updated:     { label: 'Settings updated',    icon: Settings,      badge: 'bg-slate-100 text-slate-700 border-slate-200',     dot: 'bg-slate-500',  group: 'team' },
+};
+
+const FALLBACK: ActionInfo = {
+  label: 'Activity',
+  icon: Activity,
+  badge: 'bg-slate-100 text-slate-700 border-slate-200',
+  dot: 'bg-slate-500',
+  group: 'content',
+};
+
+const actionInfo = (action: string): ActionInfo => ACTIONS[action] || FALLBACK;
+
+const FILTERS: { id: 'ALL' | Group; label: string }[] = [
+  { id: 'ALL', label: 'All' },
+  { id: 'content', label: 'Content' },
+  { id: 'files', label: 'Uploads & downloads' },
+  { id: 'posting', label: 'Posted' },
+  { id: 'review', label: 'Revisions & issues' },
+  { id: 'team', label: 'Users & settings' },
+];
+
 export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs, allUsers }) => {
-  const [filterAction, setFilterAction] = useState<string>('ALL');
+  const [filter, setFilter] = useState<'ALL' | Group>('ALL');
   const [search, setSearch] = useState('');
 
+  const q = search.trim().toLowerCase();
   const filteredLogs = logs.filter(log => {
-    const actionNormalized = log.action.toUpperCase();
-    if (filterAction !== 'ALL') {
-      if (filterAction === 'CREATED' && !actionNormalized.includes('CREATE')) return false;
-      if (filterAction === 'VIDEO_UPLOADED' && !actionNormalized.includes('UPLOAD')) return false;
-      if (filterAction === 'VIDEO_DOWNLOADED' && !actionNormalized.includes('DOWNLOAD')) return false;
-      if (filterAction === 'POSTED' && !actionNormalized.includes('POST')) return false;
-      if (filterAction === 'ISSUE' && !actionNormalized.includes('ISSUE')) return false;
-      if (filterAction === 'REVISION' && !actionNormalized.includes('REVISION')) return false;
-      if (filterAction === 'DATE_CHANGED' && !actionNormalized.includes('DATE') && !actionNormalized.includes('TIME')) return false;
-      if (filterAction === 'STATUS_CHANGED' && !actionNormalized.includes('STATUS')) return false;
-    }
-    if (search && !log.description.toLowerCase().includes(search.toLowerCase()) && !log.action.toLowerCase().includes(search.toLowerCase()) && !(log.user_name || '').toLowerCase().includes(search.toLowerCase())) {
+    if (filter !== 'ALL' && actionInfo(log.action).group !== filter) return false;
+    if (
+      q &&
+      !log.description.toLowerCase().includes(q) &&
+      !actionInfo(log.action).label.toLowerCase().includes(q) &&
+      !(log.user_name || '').toLowerCase().includes(q)
+    ) {
       return false;
     }
     return true;
   });
-
-  const getActionBadge = (action: string) => {
-    const act = action.toUpperCase();
-    if (act.includes('POST')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
-          <Rocket className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-          <span>PUBLISHED LIVE</span>
-        </span>
-      );
-    }
-    if (act.includes('UPLOAD')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs">
-          <UploadCloud className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-          <span>VIDEO UPLOADED</span>
-        </span>
-      );
-    }
-    if (act.includes('DOWNLOAD')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-100 text-cyan-900 border border-cyan-300 shadow-2xs">
-          <Download className="w-3.5 h-3.5 text-cyan-700 shrink-0" />
-          <span>VIDEO DOWNLOADED</span>
-        </span>
-      );
-    }
-    if (act.includes('REVISION')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
-          <RotateCcw className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-          <span>REVISION REQUESTED</span>
-        </span>
-      );
-    }
-    if (act.includes('ISSUE')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
-          <AlertTriangle className="w-3.5 h-3.5 text-rose-700 shrink-0" />
-          <span>ISSUE FLAGGED</span>
-        </span>
-      );
-    }
-    if (act.includes('DATE') || act.includes('TIME') || act.includes('SCHEDULE')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-100 text-sky-950 border border-sky-300 shadow-2xs">
-          <Calendar className="w-3.5 h-3.5 text-sky-700 shrink-0" />
-          <span>RESCHEDULED</span>
-        </span>
-      );
-    }
-    if (act.includes('STATUS')) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-100 text-indigo-950 border border-indigo-300 shadow-2xs">
-          <Activity className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-          <span>STATUS CHANGED</span>
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-950 border border-purple-300 shadow-2xs">
-        <Sparkles className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-        <span>CONTENT CREATED</span>
-      </span>
-    );
-  };
-
-  const getNodeColor = (action: string) => {
-    const act = action.toUpperCase();
-    if (act.includes('POST')) return 'bg-emerald-600 ring-emerald-100';
-    if (act.includes('UPLOAD')) return 'bg-blue-600 ring-blue-100';
-    if (act.includes('DOWNLOAD')) return 'bg-cyan-600 ring-cyan-100';
-    if (act.includes('REVISION')) return 'bg-amber-600 ring-amber-100';
-    if (act.includes('ISSUE')) return 'bg-rose-600 ring-rose-100';
-    if (act.includes('DATE') || act.includes('SCHEDULE')) return 'bg-sky-600 ring-sky-100';
-    if (act.includes('STATUS')) return 'bg-indigo-600 ring-indigo-100';
-    return 'bg-purple-600 ring-purple-100';
-  };
 
   return (
     <div className="space-y-6 w-full">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Publishing Audit Trail &amp; Activity Log
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-0.5 font-medium">
-            Real-time audit history of video creation, uploads, downloads, review cycles, and live postings.
+          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">Activity</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Everything that happened: content, uploads, downloads, reviews, posting and team changes.
           </p>
         </div>
 
-        <div className="px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl shadow-2xs text-xs font-bold text-slate-700">
-          Showing <span className="text-slate-900">{filteredLogs.length}</span> of <span className="text-slate-900">{logs.length}</span> actions
+        <div className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-600">
+          Showing <span className="font-medium text-slate-900">{filteredLogs.length}</span> of{' '}
+          <span className="font-medium text-slate-900">{logs.length}</span>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          <div className="flex items-center gap-1.5 text-slate-700 font-bold uppercase tracking-wider text-[11px] mr-1">
-            <Filter className="w-4 h-4 text-slate-500" />
-            <span>Filter by Action:</span>
-          </div>
-
-          {[
-            { id: 'ALL', label: 'All Activities' },
-            { id: 'CREATED', label: 'Created' },
-            { id: 'VIDEO_UPLOADED', label: 'Video Uploads' },
-            { id: 'POSTED', label: 'Published' },
-            { id: 'REVISION', label: 'Revisions' },
-            { id: 'ISSUE', label: 'Issues' },
-          ].map((f) => (
+          <span className="flex items-center gap-1.5 text-slate-500 mr-1">
+            <Filter className="w-4 h-4" />
+            Filter:
+          </span>
+          {FILTERS.map((f) => (
             <button
               key={f.id}
-              onClick={() => setFilterAction(f.id)}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
-                filterAction === f.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
+              onClick={() => setFilter(f.id)}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                filter === f.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
               }`}
             >
               {f.label}
@@ -171,20 +146,20 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs, allUsers
           ))}
         </div>
 
-        {/* Search Input */}
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by user, title, or action..."
+            placeholder="Search by person, title or action…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs font-medium"
+            className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition-all"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+              aria-label="Clear search"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -192,62 +167,49 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs, allUsers
         </div>
       </div>
 
-      {/* Activity Timeline Cards */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-2xs">
-        <div className="relative border-l-2 border-slate-200 ml-4 pl-6 sm:pl-8 space-y-5">
+      {/* Timeline */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7">
+        <div className="relative border-l border-slate-200 ml-3 pl-6 sm:pl-8 space-y-3">
           {filteredLogs.map((log) => {
             const user = allUsers.find(u => u.id === log.user_id);
+            const info = actionInfo(log.action);
+            const Icon = info.icon;
             const dateObj = new Date(log.created_at);
+            const roleName = user?.role || log.user_role;
 
             return (
-              <div key={log.id} className="relative group">
-                {/* Timeline Dot */}
-                <div 
-                  className={`absolute -left-[33px] sm:-left-[41px] top-4 w-4 h-4 rounded-full ring-4 shadow-xs transition-transform group-hover:scale-110 ${getNodeColor(log.action)}`} 
-                />
+              <div key={log.id} className="relative">
+                <span className={`absolute -left-[30px] sm:-left-[38px] top-5 w-2.5 h-2.5 rounded-full ring-4 ring-white ${info.dot}`} />
 
-                {/* Activity Card Row */}
-                <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/90 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-xs transition-all space-y-2">
+                <div className="px-4 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50/60 transition-colors">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    {/* User & Action Badge */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5 flex-wrap min-w-0">
                       {user ? (
                         <UserAvatar user={user} size="sm" />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center">
+                        <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-medium flex items-center justify-center">
                           {(log.user_name || 'S')[0].toUpperCase()}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-extrabold text-slate-900 tracking-tight">
-                          {user?.name || log.user_name || 'System Operator'}
                         </span>
-                        {getActionBadge(log.action)}
-                      </div>
-                    </div>
-
-                    {/* Timestamp */}
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                      <Clock className="w-3.5 h-3.5 text-slate-500" />
-                      <span>
-                        {dateObj.toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}{' · '}
-                        {dateObj.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                      )}
+                      <span className="text-sm font-medium text-slate-900">
+                        {user?.name || log.user_name || 'System'}
+                      </span>
+                      {roleName && <span className="text-xs text-slate-400">{roleLabel(roleName)}</span>}
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-medium ${info.badge}`}>
+                        <Icon className="w-3 h-3 shrink-0" />
+                        {info.label}
                       </span>
                     </div>
+
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                      <Clock className="w-3.5 h-3.5" />
+                      {dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {' · '}
+                      {dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
 
-                  {/* Description */}
-                  <p className="text-sm text-slate-800 font-semibold leading-relaxed pl-1">
-                    {log.description}
-                  </p>
+                  <p className="text-sm text-slate-600 leading-relaxed mt-1.5">{log.description}</p>
                 </div>
               </div>
             );
@@ -258,8 +220,8 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs, allUsers
               <div className="w-12 h-12 rounded-full bg-slate-100 mx-auto flex items-center justify-center text-slate-400">
                 <Activity className="w-6 h-6" />
               </div>
-              <p className="text-sm font-bold text-slate-700">No activity logs found</p>
-              <p className="text-xs text-slate-400">Try adjusting your search query or action filters.</p>
+              <p className="text-sm font-medium text-slate-700">No activity found</p>
+              <p className="text-xs text-slate-400">Try a different filter or search.</p>
             </div>
           )}
         </div>

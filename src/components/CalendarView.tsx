@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { localDateStr } from '../lib/dates';
-import { isManagerial, roleLabel } from '../lib/roles';
+import { isManagerial, roleLabel, canManageContent } from '../lib/roles';
 import { 
   ContentItem, 
   User, 
@@ -88,7 +88,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'ALL'>('ALL');
   const [personFilter, setPersonFilter] = useState<string>('ALL');
   const [platformFilter, setPlatformFilter] = useState<Platform | 'ALL'>('ALL');
-  const canManage = isManagerial(currentUser.role);
+  const canManage = canManageContent(currentUser.role);
   const userName = (id?: string) => allUsers.find(u => u.id === id)?.name || 'Unassigned';
   const firstName = (id?: string) => userName(id).split(' ')[0];
   const [selectedContentType, setSelectedContentType] = useState<ContentType | 'ALL'>('ALL');
@@ -426,12 +426,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const handleDragStart = (contentId: string) => {
-    if (!isManagerial(currentUser.role)) return;
+    if (!canManage) return;
     setDraggingContentId(contentId);
   };
 
   const handleDropOnDate = (targetDate: string) => {
-    if (!draggingContentId || !isManagerial(currentUser.role)) return;
+    if (!draggingContentId || !canManage) return;
     const item = contentList.find(c => c.id === draggingContentId);
     if (item && item.scheduled_date !== targetDate) {
       onMoveDatePrompt(item, targetDate);
@@ -784,7 +784,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </button>
 
               {/* Demo data (Super Admin only) */}
-              {currentUser.role === 'super_admin' && (
+              {currentUser.role === 'admin' && (
               <button
                 onClick={() => setIsBackendDrawerOpen(true)}
                 className="px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all"
@@ -991,7 +991,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           )}
                         </div>
 
-                        {isManagerial(currentUser.role) && (
+                        {canManage && (
                           <button
                             onClick={() => onOpenCreateModal(cell.dateStr)}
                             className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-slate-900 rounded hover:bg-slate-100 transition-all cursor-pointer"
@@ -1016,7 +1016,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           return (
                             <div
                               key={item.id}
-                              draggable={isManagerial(currentUser.role)}
+                              draggable={canManage}
                               onDragStart={() => handleDragStart(item.id)}
                               onClick={() => onSelectContent(item)}
                               className={`p-2.5 rounded-xl border ${styling.bg} ${styling.border} ${styling.hoverBorder} hover:shadow-xs cursor-pointer transition-all text-left group/card select-none`}

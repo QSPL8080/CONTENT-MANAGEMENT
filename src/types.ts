@@ -24,6 +24,8 @@ export interface User {
   status: UserStatus;
   /** True when the account can also sign in with email + password. */
   has_password?: boolean;
+  /** The user must choose their own password at next sign-in (temporary/default password). */
+  must_change_password?: boolean;
   last_login_at?: string;
   created_at: string;
   updated_at: string;

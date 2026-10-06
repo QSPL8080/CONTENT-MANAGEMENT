@@ -4,14 +4,15 @@ import type { UserRole } from '../src/types';
  * Quickupp Softech ContentFlow team roster (from the SRS, page 17–18).
  *
  * Every email here is seeded into the users table on server start (if it is not
- * already there). The users table IS the Google sign-in allowlist: only active
- * users whose email is in the table can use "Continue with Google".
+ * already there) with the default team password (TEAM_DEFAULT_PASSWORD, default
+ * "Quickupp@123"). The Super Admin can change any password on the Team page.
+ * Only accounts in the users table can sign in.
  *
  * Seeding never overwrites a user that already exists, so any change an admin
  * makes later on the Team page (name, email, role, disabling) is preserved.
  *
  * Manager (DMM) email has not been given yet — add it from the Team page
- * (role: Manager) or append it here when available.
+ * (role: Manager) — only the Super Admin can add or change team members.
  */
 export interface RosterEntry {
   name: string;
