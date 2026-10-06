@@ -5,6 +5,11 @@ import multer from 'multer';
 import { db, SessionInfo, nowInTimezone } from './server/db';
 import { SAMPLE_CALENDAR_ITEMS } from './server/sampleData';
 import {
+  runStorageLifecycleCleanup,
+  getStorageUsageStats,
+  startStorageLifecycleScheduler,
+} from './server/storageCleanup';
+import {
   SESSION_COOKIE,
   SESSION_TTL_DAYS,
   readCookie,
@@ -906,6 +911,13 @@ async function startServer() {
     }
     if (body.allow_editor_replace !== undefined) updates.allow_editor_replace = Boolean(body.allow_editor_replace);
     if (body.notification_email !== undefined) updates.notification_email = Boolean(body.notification_email);
+    if (body.auto_cleanup_enabled !== undefined) updates.auto_cleanup_enabled = Boolean(body.auto_cleanup_enabled);
+    if (body.retention_days !== undefined) {
+      const days = Number(body.retention_days);
+      if (!isNaN(days) && days >= 1 && days <= 730) {
+        updates.retention_days = Math.round(days);
+      }
+    }
     const updated = await db.updateSettings(updates);
     await db.logActivity({
       user_id: req.user.id, user_name: req.user.name, user_role: req.user.role,
@@ -913,6 +925,29 @@ async function startServer() {
       description: `${req.user.name} updated workspace settings.`,
     });
     res.json({ settings: updated });
+  }));
+
+  // Storage Stats (FR-STORAGE-1)
+  app.get('/api/settings/storage-stats', asyncHandler(async (req, res) => {
+    const settings = await db.getSettings();
+    const stats = await getStorageUsageStats(settings.retention_days || 90);
+    res.json(stats);
+  }));
+
+  // Manual Trigger for 90-day Storage Cleanup
+  app.post('/api/settings/cleanup', asyncHandler(async (req, res) => {
+    if (!canManageTeam(req.user.role)) {
+      return res.status(403).json({ error: 'Only the Super Admin and Admins can trigger storage cleanup.' });
+    }
+    const settings = await db.getSettings();
+    const days = req.body?.retention_days ? Number(req.body.retention_days) : (settings.retention_days || 90);
+    const result = await runStorageLifecycleCleanup(days);
+    await db.logActivity({
+      user_id: req.user.id, user_name: req.user.name, user_role: req.user.role,
+      action: 'storage_cleanup',
+      description: `${req.user.name} triggered manual storage cleanup. Freed ${(result.bytesFreed / (1024 * 1024)).toFixed(2)} MB across ${result.filesDeleted} files.`,
+    });
+    res.json(result);
   }));
 
   // -------------------------------------------------------------------------
@@ -1029,6 +1064,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`ContentFlow server running on http://localhost:${PORT}`);
+    startStorageLifecycleScheduler();
   });
 }
 

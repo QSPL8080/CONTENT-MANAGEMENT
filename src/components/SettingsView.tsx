@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Loader2, Save, Globe, Share2, ShieldCheck, Bell, AlertTriangle } from 'lucide-react';
+import { 
+  Check, 
+  Loader2, 
+  Save, 
+  Globe, 
+  Share2, 
+  ShieldCheck, 
+  Bell, 
+  AlertTriangle,
+  HardDrive
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { canManageTeam } from '../lib/roles';
 import type { Platform, User, WorkspaceSettings } from '../types';
@@ -94,17 +104,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
     'w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none disabled:opacity-60';
 
   return (
-    <form onSubmit={handleSave} className="space-y-6 w-full">
+    <form onSubmit={handleSave} className="space-y-6 w-full max-w-5xl">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Settings</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Workspace name, timezone, publishing defaults and permissions.</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Workspace configuration, timezone, publishing defaults and storage policies.</p>
         </div>
         {canEdit && (
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-colors"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             <span>{saving ? 'Saving…' : saved ? 'Saved' : 'Save settings'}</span>
@@ -116,8 +126,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
         <div className="p-3 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg" role="alert">{saveError}</div>
       )}
 
+      {/* Storage Lifecycle Info Box */}
+      <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
+            <HardDrive className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-900 text-sm">Automated 90-Day Storage Cleanup Active</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              The system automatically purges media files and temporary upload chunks older than 90 days in the background to prevent server disk overflow. All post records, captions, and history remain intact.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* General Workspace & Publishing Settings */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4 h-full">
+        <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 h-full">
           <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-slate-400" /> Workspace</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -149,7 +175,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
           </div>
         </section>
 
-        <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4 h-full">
+        <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 h-full">
           <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><Share2 className="w-4 h-4 text-slate-400" /> Publishing</h3>
           <div>
             <label htmlFor="set-platform" className="block text-xs font-semibold text-slate-700 mb-1.5">Default posting platform</label>
@@ -166,7 +192,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
         </section>
       </div>
 
-      <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+      <section className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
         <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-slate-400" /> Permissions &amp; notifications</h3>
         <label className="flex items-start gap-3 text-sm text-slate-700 cursor-pointer">
           <input
@@ -197,7 +223,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
       </section>
 
       {!canEdit && (
-        <p className="text-xs text-slate-500">Only the Super Admin can change settings.</p>
+        <p className="text-xs text-slate-500">Only the Super Admin and Admins can change settings.</p>
       )}
     </form>
   );

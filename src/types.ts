@@ -158,4 +158,6 @@ export interface WorkspaceSettings {
   default_platform: Platform;
   allow_editor_replace: boolean;
   notification_email: boolean;
+  auto_cleanup_enabled?: boolean;
+  retention_days?: number;
 }

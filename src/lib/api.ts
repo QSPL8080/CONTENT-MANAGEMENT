@@ -228,6 +228,28 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(settings),
     }),
+  getStorageStats: () =>
+    request<{
+      totalDiskUsageBytes: number;
+      totalDiskFilesCount: number;
+      eligibleItemsCount: number;
+      reclaimableBytes: number;
+      retentionDays: number;
+      cutoffDate: string;
+    }>('/api/settings/storage-stats'),
+  runStorageCleanup: (retentionDays?: number) =>
+    request<{
+      success: boolean;
+      filesDeleted: number;
+      bytesFreed: number;
+      chunksCleaned: number;
+      itemsUpdated: number;
+      retentionDays: number;
+      cutoffDate: string;
+    }>('/api/settings/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ retention_days: retentionDays }),
+    }),
 };
 
 // --- Resilient Video Upload Internals ---

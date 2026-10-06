@@ -31,7 +31,7 @@ pg.types.setTypeParser(1082, (v: string) => v);
 export const DATABASE_URL =
   process.env.DATABASE_URL || 'postgresql://postgres:8080@localhost:5432/content_management';
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+export const pool = new Pool({ connectionString: DATABASE_URL });
 
 /**
  * Create the database itself (e.g. content_management) if it does not exist yet, by connecting
@@ -195,6 +195,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enc TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS credentials_version INT NOT NULL DEFAULT 0;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS retention_days INT NOT NULL DEFAULT 90;
 ALTER TABLE content_items ADD COLUMN IF NOT EXISTS editor_notes TEXT;
 ALTER TABLE content_items ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAULT 'default';
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_workspace_fk') THEN ALTER TABLE users ADD CONSTRAINT users_workspace_fk FOREIGN KEY (workspace_id) REFERENCES workspaces(id); END IF; END $$;
@@ -327,8 +329,10 @@ function rowToSettings(r: Record<string, any>): WorkspaceSettings {
     workspace_name: r.workspace_name,
     default_timezone: r.default_timezone,
     default_platform: r.default_platform,
-    allow_editor_replace: r.allow_editor_replace,
-    notification_email: r.notification_email,
+    allow_editor_replace: r.allow_editor_replace !== undefined ? Boolean(r.allow_editor_replace) : true,
+    notification_email: r.notification_email !== undefined ? Boolean(r.notification_email) : true,
+    auto_cleanup_enabled: r.auto_cleanup_enabled !== undefined ? Boolean(r.auto_cleanup_enabled) : true,
+    retention_days: Number(r.retention_days) || 90,
   };
 }
 
@@ -1277,6 +1281,7 @@ class RelationalDatabase {
     const allowed: (keyof WorkspaceSettings)[] = [
       'workspace_name', 'default_timezone', 'default_platform',
       'allow_editor_replace', 'notification_email',
+      'auto_cleanup_enabled', 'retention_days',
     ];
     for (const key of allowed) {
       if (key in settings && (settings as any)[key] !== undefined) {
