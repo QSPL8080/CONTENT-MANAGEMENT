@@ -156,55 +156,6 @@ export default function App() {
     }
   }, [loadInitialData]);
 
-  // ── Auto-logout after 10 minutes of inactivity ──────────────────────────
-  const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-  const lastActivityRef = React.useRef<number>(Date.now());
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    lastActivityRef.current = Date.now();
-
-    let throttleTimer: any = null;
-    const handleUserActivity = () => {
-      const now = Date.now();
-      if (!throttleTimer && now - lastActivityRef.current > 1000) {
-        lastActivityRef.current = now;
-        throttleTimer = setTimeout(() => {
-          throttleTimer = null;
-        }, 1000);
-      }
-    };
-
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'];
-    events.forEach(ev => window.addEventListener(ev, handleUserActivity, { passive: true }));
-
-    const checkInactivity = () => {
-      if (Date.now() - lastActivityRef.current >= INACTIVITY_TIMEOUT_MS) {
-        api.logout().catch(() => {});
-        resetToSignedOut('You were automatically logged out after 10 minutes of inactivity.');
-      }
-    };
-
-    const intervalId = setInterval(checkInactivity, 5000);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        checkInactivity();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
-
-    return () => {
-      events.forEach(ev => window.removeEventListener(ev, handleUserActivity));
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
-      if (throttleTimer) clearTimeout(throttleTimer);
-    };
-  }, [currentUser, resetToSignedOut]);
-
   // Real-time Global Workflow Notification Listener:
   // Polls server every 3s. Whenever any task is published, completed, reviewed & flagged for revision,
   // an issue reported, or assigned, it triggers a screen pop-up, melodic chime, and visual toast for all persons.
@@ -290,7 +241,6 @@ export default function App() {
 
   // Called by the sign-in screen after a successful sign-in
   const handleSignedIn = useCallback(async (user: User) => {
-    lastActivityRef.current = Date.now();
     setAuthNotice(null);
     setCurrentUser(user);
     setRealUser(user);
@@ -502,12 +452,12 @@ export default function App() {
 
       {/* Screen Pop-up Notification Permission Banner */}
       {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default' && !dismissedPermBanner && (
-        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs border-b border-blue-800 shadow-inner sticky top-[57px] z-20">
+        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs border-b border-blue-800 shadow-inner z-10">
           <div className="flex items-center gap-2 min-w-0">
             <span className="p-1 rounded-md bg-blue-800/80 text-blue-200 shrink-0">
               <BellRing className="w-3.5 h-3.5 animate-bounce" />
             </span>
-            <span className="truncate">
+            <span className="min-w-0 leading-snug">
               <strong>Global Screen Pop-ups:</strong> Enable browser notifications to get alerts on your screen whenever a task is published, completed, reviewed, or assigned.
             </span>
           </div>
@@ -539,11 +489,11 @@ export default function App() {
 
       {/* Role scope banner for non-managers */}
       {!managerial && (
-        <div className="border-b border-amber-300/80 px-4 sm:px-6 py-2.5 flex items-center gap-3 text-xs text-amber-950 sticky top-[57px] z-20 backdrop-blur bg-amber-50/95">
+        <div className="border-b border-amber-300/80 px-4 sm:px-6 py-2.5 flex items-center gap-3 text-xs text-amber-950 z-10 backdrop-blur bg-amber-50/95">
           <span className="p-1 rounded-md bg-amber-200/80 text-amber-900 shrink-0">
             <ShieldAlert className="w-3.5 h-3.5" />
           </span>
-          <span className="truncate">
+          <span className="min-w-0 leading-snug">
             Signed in as <strong>{currentUser.name}</strong> ({roleLabel(currentUser.role)}).{' '}
             {creator
               ? 'You see only the content assigned to you. Briefs, captions and schedules are set by Admins/Managers.'
@@ -577,7 +527,9 @@ export default function App() {
         />
 
         {/* Main Content View Area */}
-        <main className="flex-1 p-4 sm:p-8 lg:p-10 min-w-0 w-full overflow-x-hidden">
+        <main className="flex-1 px-3 py-4 sm:p-6 lg:p-8 2xl:p-10 min-w-0 w-full overflow-x-hidden">
+          {/* Keep lines readable on very wide monitors */}
+          <div className="mx-auto w-full max-w-[1920px] min-w-0">
           {/* TAB 1: DASHBOARD (Adapts to Role) */}
           {currentTab === 'dashboard' && managerial && (
             <AdminDashboard
@@ -696,6 +648,7 @@ export default function App() {
           {currentTab === 'settings' && (
             <SettingsView currentUser={currentUser} />
           )}
+          </div>
         </main>
       </div>
 
@@ -710,7 +663,7 @@ export default function App() {
           activityLogs={activityLogs.filter(l => l.content_id === selectedContent.id)}
           issues={issues.filter(i => i.content_id === selectedContent.id)}
           onUploadVideo={handleUploadVideo}
-          onAttachSampleVideo={currentUser.role === 'admin' ? handleAttachSampleVideo : undefined}
+          onAttachSampleVideo={currentUser.role === 'super_admin' ? handleAttachSampleVideo : undefined}
           onMarkPostedClick={() => setPostingModalContent(selectedContent)}
           onRequestRevisionClick={() => setRevisionModalContent(selectedContent)}
           onReportIssueClick={() => setIssueModalContent(selectedContent)}

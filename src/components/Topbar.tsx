@@ -62,6 +62,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showSoundMenu, setShowSoundMenu] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [permissionState, setPermissionState] = useState<NotificationPermission | 'unsupported'>('default');
   const [soundTested, setSoundTested] = useState(false);
 
@@ -134,9 +135,9 @@ export const Topbar: React.FC<TopbarProps> = ({
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 w-full">
-      <div className="px-3.5 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 w-full">
+      <div className="px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 w-full">
         {/* Left: Brand & Date */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {onToggleMobileMenu && (
             <button
               onClick={onToggleMobileMenu}
@@ -149,16 +150,17 @@ export const Topbar: React.FC<TopbarProps> = ({
             </button>
           )}
 
-          <ContentFlowLogo size="md" />
+          <span className="sm:hidden"><ContentFlowLogo size="md" showText={false} /></span>
+          <span className="hidden sm:block"><ContentFlowLogo size="md" /></span>
 
-          <div className="hidden md:flex items-center gap-1.5 ml-3 pl-3 border-l border-slate-200 text-xs font-medium text-slate-500">
+          <div className="hidden xl:flex items-center gap-1.5 ml-3 pl-3 border-l border-slate-200 text-xs font-medium text-slate-500 whitespace-nowrap">
             <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
             <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
           </div>
         </div>
 
-        {/* Center: Search */}
-        <div className="flex-1 max-w-md mx-2">
+        {/* Center: Search (hidden on phones — opened from the search icon) */}
+        <div className="hidden lg:block flex-1 max-w-md mx-2 min-w-0">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -180,21 +182,33 @@ export const Topbar: React.FC<TopbarProps> = ({
         </div>
 
         {/* Right: Actions, Notifications, Role Switcher */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileSearchOpen(v => !v)}
+            className={`lg:hidden p-2 rounded-lg border transition-colors ${
+              mobileSearchOpen || searchQuery ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            aria-label="Search"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
           {canManageContent(currentUser.role) && (
             <button
               onClick={onOpenCreateModal}
-              className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm transition-colors shrink-0"
+              className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-medium p-2 sm:px-3 sm:py-1.5 rounded-lg shadow-sm transition-colors shrink-0"
               id="btn-create-content"
+              aria-label="Create Content"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Create Content</span>
-              <span className="sm:hidden">Create</span>
+              <span className="hidden lg:inline whitespace-nowrap">Create Content</span>
+              <span className="hidden sm:inline lg:hidden">Create</span>
             </button>
           )}
 
           {/* Browser Alert & Chime Control */}
-          <div className="relative" ref={soundMenuRef}>
+          <div className="relative hidden sm:block" ref={soundMenuRef}>
             <button
               onClick={() => setShowSoundMenu(!showSoundMenu)}
               className={`relative p-2 rounded-lg transition-colors border ${
@@ -210,7 +224,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             </button>
 
             {showSoundMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="fixed inset-x-3 top-[60px] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                   <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
                     <BellRing className="w-3.5 h-3.5" />
@@ -276,7 +290,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             </button>
 
             {showNotifMenu && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="fixed inset-x-3 top-[60px] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm text-slate-900">Notifications</span>
@@ -344,7 +358,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           <div className="relative" ref={roleMenuRef}>
             <button
               onClick={() => setShowRoleMenu(!showRoleMenu)}
-              className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all bg-white shadow-2xs"
+              className="flex items-center gap-2 p-1 sm:pl-2 sm:pr-3 sm:py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all bg-white shadow-2xs"
               id="btn-admin-profile"
             >
               <UserAvatar user={currentUser} size="sm" />
@@ -357,11 +371,11 @@ export const Topbar: React.FC<TopbarProps> = ({
                   {roleBadgeConfig.label}
                 </div>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+              <ChevronDown className="hidden sm:block w-3.5 h-3.5 text-slate-400 ml-0.5" />
             </button>
 
             {showRoleMenu && (
-              <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="fixed inset-x-3 top-[60px] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
                   <UserAvatar user={currentUser} size="md" />
                   <div className="min-w-0">
@@ -381,8 +395,10 @@ export const Topbar: React.FC<TopbarProps> = ({
                   <div className="flex items-center justify-between py-1">
                     <span className="text-slate-500 font-medium">Access Scope:</span>
                     <span className="font-medium text-slate-800 text-right">
-                      {currentUser.role === 'super_admin' || currentUser.role === 'admin'
-                        ? 'Dashboard, content, users & settings'
+                      {currentUser.role === 'super_admin'
+                        ? 'Dashboard, users & settings'
+                        : currentUser.role === 'admin'
+                        ? 'All content & assignments'
                         : currentUser.role === 'manager'
                         ? 'All content & assignments'
                         : currentUser.role === 'graphic_designer'
@@ -428,6 +444,32 @@ export const Topbar: React.FC<TopbarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Phone search row */}
+      {mobileSearchOpen && (
+        <div className="lg:hidden px-3 sm:px-6 pb-2.5">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              autoFocus
+              placeholder="Search content, people, status…"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-xl pl-9 pr-9 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 };

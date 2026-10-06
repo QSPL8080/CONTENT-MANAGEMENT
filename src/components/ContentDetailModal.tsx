@@ -140,7 +140,7 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
     (content.status === 'EDITING' || content.status === 'PLANNED') &&
     content.scheduled_date < todayStr;
 
-  // Admins edit and manage content; the Super Admin sees everything but is view-only
+  // Admins & Managers edit content; the Super Admin sees everything but is view-only here
   const managerial = canManageContent(currentUser.role);
   const isOverseer = currentUser.role === 'super_admin';
   const isAssignedCreator = isCreator(currentUser.role) && currentUser.id === content.editor_id;
@@ -291,11 +291,11 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl max-w-4xl xl:max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[94vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-4xl xl:max-w-5xl 2xl:max-w-6xl w-full min-w-0 shadow-2xl border border-slate-200 overflow-hidden h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[94vh] flex flex-col">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0 sticky top-0 z-20">
-          <div className="flex items-center gap-3 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-start sm:items-center justify-between gap-2 bg-white shrink-0 sticky top-0 z-20">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
             <PlatformBadge platform={content.platform} />
             <ContentTypeBadge type={content.content_type} />
             <StatusBadge status={content.status} size="md" />
@@ -305,14 +305,15 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
 
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors shrink-0"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="px-6 border-b border-slate-100 flex items-center gap-6 text-xs font-semibold shrink-0 bg-slate-50/70">
+        <div className="px-4 sm:px-6 border-b border-slate-100 flex items-center gap-4 sm:gap-6 text-xs font-semibold shrink-0 bg-slate-50/70 overflow-x-auto whitespace-nowrap">
           <button
             onClick={() => setActiveTab('details')}
             className={`py-2.5 border-b-2 transition-colors ${
@@ -358,13 +359,13 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
         </div>
 
         {/* Modal Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden flex-1 min-w-0 space-y-5 sm:space-y-6">
           {activeTab === 'details' && (
             <>
               {/* Title & Schedule */}
               <div>
-                <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
-                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                <div className="flex items-start sm:items-center justify-between gap-2 sm:gap-3 flex-wrap mb-1">
+                  <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight break-words min-w-0">
                     {content.title}
                   </h2>
                   {isOverseer ? (
@@ -394,8 +395,8 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                     {content.scheduled_time}
                   </span>
                   {content.description && (
-                    <span className="text-slate-500 line-clamp-1 italic">
-                      — {content.description}
+                    <span className="basis-full text-slate-500 italic break-words">
+                      {content.description}
                     </span>
                   )}
                 </div>
@@ -404,8 +405,8 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
               {/* Status Banner for Handoff (Section 47) */}
               {content.status === 'READY_TO_POST' && (
                 <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 shrink-0 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
                       <CheckCircle2 className="w-5 h-5" />
                     </div>
                     <div>
@@ -458,32 +459,6 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
               {actionError && (
                 <div className="p-2.5 bg-rose-50 text-rose-700 text-xs font-medium rounded-lg border border-rose-200" role="alert">
                   {actionError}
-                </div>
-              )}
-
-              {/* Issue Banner if status is ISSUE */}
-              {content.status === 'ISSUE' && (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <AlertTriangle className="w-4 h-4" />
-                  </div>
-                  <div className="space-y-1.5 flex-1">
-                    <div className="text-xs font-bold text-rose-900 uppercase tracking-wider">
-                      Issue Reported on This Content
-                    </div>
-                    <p className="text-xs text-rose-800 font-medium">
-                      {content.internal_notes || content.instructions || 'An issue was reported for this item during review. Please fix the issue and upload the corrected file.'}
-                    </p>
-                    {issues && issues.filter(i => i.status === 'OPEN').length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {issues.filter(i => i.status === 'OPEN').map(iss => (
-                          <div key={iss.id} className="text-xs text-rose-800 bg-white/90 p-2.5 rounded-lg border border-rose-200/80">
-                            <span className="font-semibold">{iss.reported_by_name || 'Intern / Reviewer'}:</span> {iss.description}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
@@ -542,12 +517,12 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
               {/* Main 2-Column Section: Left = Video & Upload; Right = Copy & Instructions */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Left Column: Video Preview & Actions (5 cols) */}
-                <div className="lg:col-span-5 space-y-4">
+                <div className="lg:col-span-5 space-y-4 min-w-0">
                   <div
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
-                    className={`bg-slate-900 rounded-2xl overflow-hidden shadow-md border transition-all duration-200 flex flex-col items-center justify-center relative min-h-[300px] ${
+                    className={`bg-slate-900 rounded-2xl overflow-hidden shadow-md border transition-all duration-200 flex flex-col items-center justify-center relative min-h-[220px] sm:min-h-[300px] ${
                       isDragging 
                         ? 'border-blue-500 ring-4 ring-blue-500/20 bg-slate-800' 
                         : 'border-slate-800'
@@ -723,9 +698,9 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                 </div>
 
                 {/* Right Column: Information, Copyables & Instructions (7 cols) */}
-                <div className="lg:col-span-7 space-y-4">
+                <div className="lg:col-span-7 space-y-4 min-w-0">
                   {/* Responsibility cards */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/70">
                       <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
                         Designer / Editor

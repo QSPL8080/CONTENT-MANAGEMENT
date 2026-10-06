@@ -83,7 +83,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [year, setYear] = useState(todayObj.getFullYear());
   const [month, setMonth] = useState(todayObj.getMonth()); // 0 = Jan, 8 = Sep
   const [activeTab, setActiveTab] = useState<TabMode>('overview');
-  const [viewDensity, setViewDensity] = useState<ViewDensity>('month');
+  // Phones start on the list view (a 7-column month grid is too small to read there)
+  const [viewDensity, setViewDensity] = useState<ViewDensity>(
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'list' : 'month'
+  );
   const [focusDate, setFocusDate] = useState<string>(localDateStr(todayObj));
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'ALL'>('ALL');
   const [personFilter, setPersonFilter] = useState<string>('ALL');
@@ -495,7 +498,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6 items-start">
         
         {/* LEFT COLUMN: Indicators & Quick Buttons */}
-        <div className="lg:col-span-4 xl:col-span-3 2xl:col-span-2 space-y-6">
+        <div className="order-2 lg:order-1 lg:col-span-4 xl:col-span-3 2xl:col-span-2 space-y-6 min-w-0">
           
           {/* Card 1: Indicators */}
           <div className="bg-[#F8F9FA] rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
@@ -615,7 +618,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
 
         {/* RIGHT COLUMN: Tab Bar, Month Nav, Calendar Grid */}
-        <div className="lg:col-span-8 xl:col-span-9 2xl:col-span-10 space-y-4">
+        <div className="order-1 lg:order-2 lg:col-span-8 xl:col-span-9 2xl:col-span-10 space-y-4 min-w-0">
           
           {/* Top Pill Navigation Tabs (Matching Screenshot) */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1198,15 +1201,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <div
                       key={item.id}
                       onClick={() => onSelectContent(item)}
-                      className="p-3.5 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4 cursor-pointer"
+                      className="p-3 sm:p-3.5 hover:bg-slate-50/80 transition-colors flex items-start sm:items-center justify-between gap-2 sm:gap-4 cursor-pointer"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${statusInfo.dot}`} />
+                      <div className="flex items-start sm:items-center gap-3 min-w-0">
+                        <div className={`w-3 h-3 mt-1 sm:mt-0 shrink-0 rounded-full ${statusInfo.dot}`} />
                         <div>
                           <div className="text-sm font-bold text-slate-900 leading-snug">
                             {item.title}
                           </div>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                          <div className="flex items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-slate-500 flex-wrap">
                             <span>{item.scheduled_date} at {item.scheduled_time}</span>
                             <span>•</span>
                             <span>{firstName(item.editor_id)} → {firstName(item.poster_id)}</span>
@@ -1220,11 +1223,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${statusInfo.pill}`}>
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        <span className={`text-[11px] sm:text-xs font-semibold px-2 sm:px-2.5 py-1 rounded-md whitespace-nowrap ${statusInfo.pill}`}>
                           {statusInfo.label}
                         </span>
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                        <ChevronRight className="hidden sm:block w-4 h-4 text-slate-400" />
                       </div>
                     </div>
                   );
@@ -1238,7 +1241,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       {/* Backend Drawer Modal (Triggered by 🗄 Backend tab) */}
       {isBackendDrawerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-y-auto max-h-[92dvh]">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
                 <Database className="w-5 h-5 text-slate-800" />

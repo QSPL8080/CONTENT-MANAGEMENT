@@ -134,10 +134,10 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl xl:max-w-3xl w-full min-w-0 shadow-2xl border border-slate-200 overflow-hidden h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[92vh] flex flex-col">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white sticky top-0 z-10">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex items-center justify-between gap-2 shrink-0 bg-white">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center">
               <Film className="w-4 h-4" />
@@ -151,14 +151,16 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 shrink-0"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
+          <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
           {error && (
             <div className="p-3 text-xs bg-rose-50 text-rose-700 border border-rose-200 rounded-lg">
               {error}
@@ -494,8 +496,10 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 sticky bottom-0 bg-white z-10">
+          </div>
+
+          {/* Footer Actions (always visible) */}
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-white shrink-0">
             <button
               type="button"
               onClick={onClose}
