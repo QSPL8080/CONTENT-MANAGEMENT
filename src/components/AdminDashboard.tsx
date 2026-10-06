@@ -423,16 +423,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div>
                 <p className="text-sm font-bold text-slate-700">No content found in this queue</p>
                 <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                  Create a new content item or change your active filter above.
+                  {canCreate ? 'Create a new content item or change your active filter above.' : 'Change your active filter above to view other queues.'}
                 </p>
               </div>
-              <button
-                onClick={onOpenCreateModal}
-                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Create New Post</span>
-              </button>
+              {canCreate && (
+                <button
+                  onClick={onOpenCreateModal}
+                  className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create New Post</span>
+                </button>
+              )}
             </div>
           )}
         </div>

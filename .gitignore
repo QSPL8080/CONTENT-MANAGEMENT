@@ -8,3 +8,4 @@ coverage/
 !.env.example
 # Password vault key (keep a private backup of this file)
 data/.vault-key
+uploads/

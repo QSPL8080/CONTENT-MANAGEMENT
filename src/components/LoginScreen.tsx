@@ -9,8 +9,23 @@ interface LoginScreenProps {
   notice?: string | null;
 }
 
+const REMEMBER_EMAIL_KEY = 'cf_remembered_email';
+
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) => {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem(REMEMBER_EMAIL_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [rememberEmail, setRememberEmail] = useState(() => {
+    try {
+      return !!localStorage.getItem(REMEMBER_EMAIL_KEY);
+    } catch {
+      return false;
+    }
+  });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -27,6 +42,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
     setError(null);
     try {
       const res = await api.login({ email: email.trim(), password });
+      try {
+        if (rememberEmail) {
+          localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+        } else {
+          localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
+      } catch {
+        // quiet fail on private mode / disabled storage
+      }
       onSignedIn(res.user);
     } catch (err: any) {
       setError(err.message || 'Invalid email or password');
@@ -48,7 +72,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
           {error && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-start gap-2 font-medium" role="alert">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
@@ -66,7 +90,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
                 id="login-email"
                 type="email"
                 required
-                autoComplete="username"
+                autoComplete="off"
                 placeholder="you@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -85,7 +109,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
                 required
-                autoComplete="current-password"
+                autoComplete="new-password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -100,6 +124,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-0.5">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 hover:text-slate-900 font-medium">
+              <input
+                type="checkbox"
+                checked={rememberEmail}
+                onChange={(e) => setRememberEmail(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20 cursor-pointer accent-slate-900"
+              />
+              <span>Remember email</span>
+            </label>
           </div>
 
           <button

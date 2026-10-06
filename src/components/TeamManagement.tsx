@@ -41,10 +41,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   onAddUser,
   onUpdateUser,
 }) => {
-  // Super Admin: everything. Admin: edit name/email/role of non-admin members only.
+  // Super Admin & Admin: full team and user management
   const canEdit = canManageTeam(currentUser.role);
-  const isSuperAdmin = currentUser.role === 'super_admin';
-  const roleOptions = isSuperAdmin ? assignableRoles(currentUser.role) : ADMIN_EDITABLE_ROLES;
+  const isSuperOrAdmin = canManageTeam(currentUser.role);
+  const roleOptions = assignableRoles(currentUser.role);
 
   const [modalMode, setModalMode] = useState<'add' | 'edit' | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -53,7 +53,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  // Super Admin: revealed passwords (auto-hidden after 30 seconds)
+  // Super Admin & Admin: revealed passwords (auto-hidden after 30 seconds)
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [revealError, setRevealError] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -105,8 +105,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const canEditUser = (u: User) =>
-    isSuperAdmin ||
-    (canEditTeamInfo(currentUser.role) && u.role !== 'super_admin' && u.role !== 'admin');
+    isSuperOrAdmin || canEditTeamInfo(currentUser.role);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,8 +133,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         if (form.name.trim() !== editingUser.name) updates.name = form.name.trim();
         if (form.email.trim().toLowerCase() !== editingUser.email) updates.email = form.email.trim().toLowerCase();
         if (form.role !== editingUser.role) updates.role = form.role;
-        if (isSuperAdmin && form.status !== editingUser.status) updates.status = form.status;
-        if (isSuperAdmin && form.password) updates.password = form.password;
+        if (isSuperOrAdmin && form.status !== editingUser.status) updates.status = form.status;
+        if (isSuperOrAdmin && form.password) updates.password = form.password;
         if (Object.keys(updates).length > 0) {
           await onUpdateUser(editingUser.id, updates);
         }
@@ -201,12 +200,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{canEdit ? 'Manage Users' : 'Team'}</h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5 max-w-2xl">
-            {activeCount} active member{activeCount === 1 ? '' : 's'}. Only the accounts listed here can sign in, with the email and password set by the Super Admin.
-            {isSuperAdmin
-              ? ' You are the only one who can add or deactivate members and set passwords.'
-              : canEditTeamInfo(currentUser.role)
-              ? ' You can edit members\' details. Adding, deactivating and passwords are handled by the Super Admin.'
-              : ' Only the Super Admin can add, edit or deactivate members.'}
+            {activeCount} active member{activeCount === 1 ? '' : 's'}. Only the accounts listed here can sign in, with the email and password set by the Admins or Super Admin.
+            {isSuperOrAdmin
+              ? ' You can add or deactivate members, set passwords, and manage workspace access.'
+              : ' Only Admins and the Super Admin can add, edit or deactivate members.'}
           </p>
         </div>
 
@@ -358,7 +355,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
-                            {isSuperAdmin && u.id !== currentUser.id && (
+                            {isSuperOrAdmin && u.id !== currentUser.id && (
                               <button
                                 onClick={() => toggleStatus(u)}
                                 disabled={busyUserId === u.id}
@@ -397,7 +394,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                     {modalMode === 'add' ? 'Add team member' : `Edit ${editingUser?.name}`}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isSuperAdmin ? 'Signs in with this email and the password you set' : 'Edit name, email and role'}
+                    {isSuperOrAdmin ? 'Signs in with this email and the password you set' : 'Edit name, email and role'}
                   </p>
                 </div>
               </div>
@@ -452,7 +449,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                 <p className="text-[11px] text-slate-500 mt-1">{ROLE_DESCRIPTIONS[form.role]}</p>
               </div>
 
-              {isSuperAdmin && modalMode === 'edit' && editingUser?.id !== currentUser.id && (
+              {isSuperOrAdmin && modalMode === 'edit' && editingUser?.id !== currentUser.id && (
                 <div>
                   <span className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Status</span>
                   <div className="grid grid-cols-2 gap-2">
@@ -476,7 +473,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                 </div>
               )}
 
-              {isSuperAdmin && (
+              {isSuperOrAdmin && (
               <div>
                 <label htmlFor="tm-password" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   <span className="inline-flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Password</span>{' '}

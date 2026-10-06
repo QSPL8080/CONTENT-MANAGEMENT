@@ -299,18 +299,25 @@ async function uploadVideoChunked(
     const chunkBlob = file.slice(start, end);
 
     const formData = new FormData();
-    formData.append('chunk', chunkBlob);
     formData.append('uploadId', uploadId);
     formData.append('chunkIndex', String(chunkIndex));
     formData.append('totalChunks', String(totalChunks));
     formData.append('filename', file.name);
     formData.append('filesize', String(file.size));
+    formData.append('chunk', chunkBlob, file.name);
 
     // Send chunk with retry on transient failure
     const sendChunk = async (attempt = 1): Promise<any> => {
       return new Promise((resolve, reject) => {
+        const queryParams = new URLSearchParams({
+          uploadId,
+          chunkIndex: String(chunkIndex),
+          totalChunks: String(totalChunks),
+          filename: file.name,
+          filesize: String(file.size),
+        });
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `/api/content/${contentId}/upload-chunk`, true);
+        xhr.open('POST', `/api/content/${contentId}/upload-chunk?${queryParams.toString()}`, true);
         xhr.withCredentials = true;
 
         if (xhr.upload && onProgress) {

@@ -140,7 +140,7 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
     (content.status === 'EDITING' || content.status === 'PLANNED') &&
     content.scheduled_date < todayStr;
 
-  // Admins & Managers edit content; the Super Admin sees everything but is view-only here
+  // Admins edit and manage content; the Super Admin sees everything but is view-only
   const managerial = canManageContent(currentUser.role);
   const isOverseer = currentUser.role === 'super_admin';
   const isAssignedCreator = isCreator(currentUser.role) && currentUser.id === content.editor_id;
@@ -458,6 +458,32 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
               {actionError && (
                 <div className="p-2.5 bg-rose-50 text-rose-700 text-xs font-medium rounded-lg border border-rose-200" role="alert">
                   {actionError}
+                </div>
+              )}
+
+              {/* Issue Banner if status is ISSUE */}
+              {content.status === 'ISSUE' && (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <div className="text-xs font-bold text-rose-900 uppercase tracking-wider">
+                      Issue Reported on This Content
+                    </div>
+                    <p className="text-xs text-rose-800 font-medium">
+                      {content.internal_notes || content.instructions || 'An issue was reported for this item during review. Please fix the issue and upload the corrected file.'}
+                    </p>
+                    {issues && issues.filter(i => i.status === 'OPEN').length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {issues.filter(i => i.status === 'OPEN').map(iss => (
+                          <div key={iss.id} className="text-xs text-rose-800 bg-white/90 p-2.5 rounded-lg border border-rose-200/80">
+                            <span className="font-semibold">{iss.reported_by_name || 'Intern / Reviewer'}:</span> {iss.description}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

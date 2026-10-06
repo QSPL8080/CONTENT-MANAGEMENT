@@ -55,16 +55,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const getNavItems = () => {
-    if (canManageTeam(currentRole)) {
-      // Super Admin: oversight + user management only
+    if (currentRole === 'super_admin') {
+      // Super Admin: oversight + user management + settings
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'team', label: 'Manage Users', icon: Users, badge: null },
         { id: 'activity', label: 'Activity', icon: Activity, badge: null },
         { id: 'settings', label: 'Settings', icon: Settings, badge: null },
       ];
+    } else if (currentRole === 'admin') {
+      // Admin: full content management + user management + settings
+      return [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
+        { id: 'calendar', label: 'Content Calendar', icon: CalendarIcon, badge: null },
+        { id: 'content', label: 'All Content', icon: Film, badge: metrics?.total },
+        { id: 'team', label: 'Manage Users', icon: Users, badge: null },
+        { id: 'activity', label: 'Activity', icon: Activity, badge: null },
+        { id: 'settings', label: 'Settings', icon: Settings, badge: null },
+      ];
     } else if (isManagerial(currentRole)) {
-      // Admin & Manager
+      // Manager
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'calendar', label: 'Content Calendar', icon: CalendarIcon, badge: null },
@@ -77,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'calendar', label: 'Calendar', icon: CalendarIcon, badge: null },
-        { id: 'my_work', label: 'My Work', icon: Clock, badge: (metrics?.planned || 0) + (metrics?.editing || 0) + (metrics?.revision || 0) },
+        { id: 'my_work', label: 'My Work', icon: Clock, badge: (metrics?.planned || 0) + (metrics?.editing || 0) + (metrics?.revision || 0) + (metrics?.issue || 0) },
         { id: 'activity', label: 'Activity', icon: Activity, badge: null },
       ];
     } else {
@@ -101,6 +111,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const totalItems = metrics?.total || 0;
   const postedItems = metrics?.posted || 0;
   const completionRate = totalItems > 0 ? Math.round((postedItems / totalItems) * 100) : 0;
+
+  const handleAttentionClick = () => {
+    if (isCreator(currentRole)) {
+      onSelectTab('my_work');
+    } else if (isPoster(currentRole)) {
+      onSelectTab('posting_queue');
+    } else {
+      onSelectTab('dashboard');
+    }
+    if (onCloseMobile) onCloseMobile();
+  };
 
   const content = (
     <div className="flex flex-col h-full bg-slate-50/95 border-r border-slate-200/90 w-72 select-none">
@@ -188,15 +209,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Attention: Overdue or Issues */}
               {(metrics.overdue_posting > 0 || metrics.revision > 0 || metrics.issue > 0) && (
-                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-rose-50 border border-rose-200/80 text-xs shadow-2xs">
+                <button 
+                  onClick={handleAttentionClick}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-rose-50 border border-rose-200/80 hover:border-rose-400 text-xs shadow-2xs transition-all cursor-pointer text-left"
+                >
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
                     <span className="font-bold text-rose-800">Needs Attention</span>
                   </div>
                   <span className="font-bold text-rose-700 text-sm">
                     {metrics.overdue_posting + metrics.revision + metrics.issue}
                   </span>
-                </div>
+                </button>
               )}
             </div>
           </div>

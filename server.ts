@@ -97,13 +97,15 @@ if (!fs.existsSync(TEMP_UPLOADS_DIR)) {
 
 const chunkStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const uploadId = String(req.body.uploadId || 'chunk').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const rawUploadId = req.query.uploadId || req.body?.uploadId || 'chunk';
+    const uploadId = String(rawUploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const dir = path.join(TEMP_UPLOADS_DIR, uploadId);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
   filename: (req, _file, cb) => {
-    const chunkIndex = parseInt(req.body.chunkIndex, 10) || 0;
+    const rawChunkIndex = req.query.chunkIndex !== undefined ? req.query.chunkIndex : req.body?.chunkIndex;
+    const chunkIndex = parseInt(String(rawChunkIndex), 10) || 0;
     cb(null, `part-${chunkIndex}`);
   },
 });
@@ -122,9 +124,9 @@ function canViewContent(user: User, item: ContentItem) {
 
 async function canUploadFinal(user: User, item: ContentItem): Promise<string | null> {
   if (canManageContent(user.role)) return null;
-  if (user.role === 'super_admin') return 'The Super Admin account is for oversight — content is handled by Admins and Managers.';
+  if (user.role === 'super_admin') return 'The Super Admin account is for oversight — content is handled by Admins.';
   if (!isCreator(user.role) || item.editor_id !== user.id) {
-    return 'Only the assigned Graphic Designer / Video Editor (or an Admin/Manager) can upload the final file.';
+    return 'Only the assigned Graphic Designer / Video Editor (or an Admin) can upload the final file.';
   }
   if (item.status === 'POSTED') return 'This content is already posted — the final file can no longer be replaced.';
   if (item.video_url) {
@@ -272,7 +274,7 @@ async function startServer() {
   app.post('/api/users', asyncHandler(async (req, res) => {
     const actor = req.user;
     if (!canManageTeam(actor.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin can add team members.' });
+      return res.status(403).json({ error: 'Only the Super Admin and Admins can add team members.' });
     }
     const name = String(req.body?.name || '').trim();
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -302,10 +304,10 @@ async function startServer() {
     res.status(201).json({ user: newUser });
   }));
 
-  // Super Admin: see a member's CURRENT password (kept in sync when they change it). Logged.
+  // Super Admin & Admin: see a member's CURRENT password (kept in sync when they change it). Logged.
   app.get('/api/users/:id/password', asyncHandler(async (req, res) => {
     if (!canManageTeam(req.user.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin can view passwords.' });
+      return res.status(403).json({ error: 'Only the Super Admin and Admins can view passwords.' });
     }
     const target = await db.getUserById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
@@ -324,31 +326,11 @@ async function startServer() {
 
   app.patch('/api/users/:id', asyncHandler(async (req, res) => {
     const actor = req.user;
-    if (!canEditTeamInfo(actor.role)) {
+    if (!canManageTeam(actor.role)) {
       return res.status(403).json({ error: 'Only the Super Admin and Admins can edit team members.' });
     }
     const target = await db.getUserById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
-
-    // Admins: may edit name, email and role of non-admin members only. No deactivating, no passwords.
-    if (actor.role === 'admin') {
-      if (target.role === 'super_admin' || target.role === 'admin') {
-        return res.status(403).json({ error: 'Admins cannot edit Admin or Super Admin accounts.' });
-      }
-      if (req.body.status !== undefined && req.body.status !== target.status) {
-        return res.status(403).json({ error: 'Only the Super Admin can activate or deactivate members.' });
-      }
-      if (req.body.password) {
-        return res.status(403).json({ error: 'Only the Super Admin can change team passwords.' });
-      }
-      if (req.body.role !== undefined && req.body.role !== target.role && !ADMIN_EDITABLE_ROLES.includes(req.body.role)) {
-        return res.status(403).json({ error: `Admins cannot assign the ${roleLabel(req.body.role)} role.` });
-      }
-    }
-
-    if (target.role === 'super_admin' && actor.role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only the Super Admin can change a Super Admin account.' });
-    }
 
     const updates: Record<string, any> = {};
     if (req.body.name !== undefined) {
@@ -372,7 +354,7 @@ async function startServer() {
       if (target.id === actor.id) {
         return res.status(400).json({ error: 'You cannot change your own role.' });
       }
-      const allowed = actor.role === 'admin' ? ADMIN_EDITABLE_ROLES : assignableRoles(actor.role);
+      const allowed = assignableRoles(actor.role);
       if (!isValidRole(role) || !allowed.includes(role)) {
         return res.status(403).json({ error: `You cannot assign the ${roleLabel(role)} role.` });
       }
@@ -474,7 +456,7 @@ async function startServer() {
   app.post('/api/content', asyncHandler(async (req, res) => {
     const currentUser = req.user;
     if (!canManageContent(currentUser.role)) {
-      return res.status(403).json({ error: 'Only Admins and Managers can create content.' });
+      return res.status(403).json({ error: 'Only Admins can create content. The Super Admin account is for oversight.' });
     }
 
     const {
@@ -536,7 +518,7 @@ async function startServer() {
     const attempted = Object.keys(body);
 
     if (currentUser.role === 'super_admin') {
-      return res.status(403).json({ error: 'The Super Admin account is for oversight — content is edited by Admins and Managers.' });
+      return res.status(403).json({ error: 'The Super Admin account is for oversight — content is edited by Admins.' });
     }
     if (canManageContent(currentUser.role)) {
       if (body.status !== undefined && !CONTENT_STATUSES.includes(body.status)) {
@@ -571,7 +553,7 @@ async function startServer() {
       const violations = attempted.filter(f => !CREATOR_EDITABLE.includes(f));
       if (violations.length > 0) {
         return res.status(403).json({
-          error: `${roleLabel(currentUser.role)}s cannot change ${violations.join(', ')}. Ask an Admin or Manager.`,
+          error: `${roleLabel(currentUser.role)}s cannot change ${violations.join(', ')}. Ask an Admin.`,
         });
       }
       if (body.status !== undefined) {
@@ -593,10 +575,10 @@ async function startServer() {
     res.json({ content: updated });
   }));
 
-  // Demo calendar (Managers/Admins only)
+  // Demo calendar (Admins only)
   app.post('/api/content/seed-instagram-calendar', asyncHandler(async (req, res) => {
     if (!canManageContent(req.user.role)) {
-      return res.status(403).json({ error: 'Only Admins and Managers can load demo content.' });
+      return res.status(403).json({ error: 'Only Admins can load demo content.' });
     }
     const users = (await db.getUsers()).filter(u => u.status === 'active');
     const admin = req.user;
@@ -669,7 +651,11 @@ async function startServer() {
         return res.status(400).json({ error: `Chunk upload error: ${err.message}` });
       }
 
-      const { uploadId, chunkIndex, totalChunks, filename, filesize } = req.body;
+      const uploadId = req.query.uploadId || req.body?.uploadId;
+      const chunkIndex = req.query.chunkIndex !== undefined ? req.query.chunkIndex : req.body?.chunkIndex;
+      const totalChunks = req.query.totalChunks || req.body?.totalChunks;
+      const filename = req.query.filename || req.body?.filename;
+      const filesize = req.query.filesize || req.body?.filesize;
       const contentId = req.params.id;
 
       if (!uploadId || chunkIndex === undefined || !totalChunks || !filename) {
@@ -681,8 +667,8 @@ async function startServer() {
       }
 
       const cleanUploadId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
-      const chunkIdx = parseInt(chunkIndex, 10);
-      const total = parseInt(totalChunks, 10);
+      const chunkIdx = parseInt(String(chunkIndex), 10);
+      const total = parseInt(String(totalChunks), 10);
       const chunkDir = path.join(TEMP_UPLOADS_DIR, cleanUploadId);
 
       if (chunkIdx + 1 < total) {
@@ -692,18 +678,16 @@ async function startServer() {
       try {
         const uniqueName = safeStoredName(String(filename));
         const finalPath = path.join(UPLOADS_DIR, uniqueName);
-        const writeStream = fs.createWriteStream(finalPath);
+        if (fs.existsSync(finalPath)) {
+          try { fs.unlinkSync(finalPath); } catch {}
+        }
 
         for (let i = 0; i < total; i++) {
           const partPath = path.join(chunkDir, `part-${i}`);
           if (!fs.existsSync(partPath)) throw new Error(`Missing chunk #${i + 1}`);
-          writeStream.write(fs.readFileSync(partPath));
+          fs.appendFileSync(finalPath, fs.readFileSync(partPath));
         }
-        writeStream.end();
-        await new Promise<void>((resolve, reject) => {
-          writeStream.on('finish', () => resolve());
-          writeStream.on('error', reject);
-        });
+
         try {
           fs.rmSync(chunkDir, { recursive: true, force: true });
         } catch (rmErr) {
@@ -714,7 +698,7 @@ async function startServer() {
         const videoUrl = `/api/videos/${uniqueName}`;
         const updated = await db.uploadVideoForContent(
           contentId,
-          { video_url: videoUrl, video_filename: String(filename), video_filesize: stat.size || parseInt(filesize, 10) || 0 },
+          { video_url: videoUrl, video_filename: String(filename), video_filesize: stat.size || parseInt(String(filesize), 10) || 0 },
           (req as AuthedRequest).user
         );
         if (!updated) return res.status(404).json({ error: 'Content item not found' });
@@ -898,7 +882,7 @@ async function startServer() {
 
   app.patch('/api/settings', asyncHandler(async (req, res) => {
     if (!canManageTeam(req.user.role)) {
-      return res.status(403).json({ error: 'Only the Super Admin can change workspace settings.' });
+      return res.status(403).json({ error: 'Only the Super Admin and Admins can change workspace settings.' });
     }
     const body = req.body || {};
     const updates: Record<string, any> = {};
