@@ -63,8 +63,8 @@ export function hashToken(token: string): string {
 // Login rate limiting (in-memory, per IP + identifier)
 // ---------------------------------------------------------------------------
 const attempts = new Map<string, { count: number; first: number }>();
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 10;
+const WINDOW_MS = 5 * 60 * 1000;
+const MAX_ATTEMPTS = 50;
 
 export function tooManyAttempts(key: string): boolean {
   const now = Date.now();

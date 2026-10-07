@@ -751,6 +751,7 @@ export default function App() {
             setShowChangePassword(false);
             setCurrentUser(u);
             setRealUser(u);
+            setUsers(prev => prev.map(item => item.id === u.id ? { ...item, ...u } : item));
           }}
           onLogout={handleLogout}
         />

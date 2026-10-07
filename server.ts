@@ -198,17 +198,24 @@ async function startServer() {
     if (!user) {
       recordFailedAttempt(limiterKey);
       const exists = await db.getUserByEmail(email);
-      if (exists && !exists.password_hash) {
+      if (!exists) {
+        console.warn(`⚠️ [Auth] Login failed: User not found for "${email}"`);
+      } else if (!exists.password_hash) {
+        console.warn(`⚠️ [Auth] Login failed: No password hash for "${email}"`);
         return res.status(401).json({ error: 'Your password has not been set yet. Ask an Admin to set it.' });
+      } else {
+        console.warn(`⚠️ [Auth] Login failed: Wrong password for "${email}"`);
       }
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     if (user.status !== 'active') {
+      console.warn(`⚠️ [Auth] Login blocked: Inactive account "${email}"`);
       return res.status(403).json({ error: 'This account has been deactivated. Contact an Admin.' });
     }
     clearAttempts(limiterKey);
     await startSession(req, res, user, 'password');
     await db.touchLastLogin(user.id);
+    console.log(`✅ [Auth] Signed in: ${user.name} (${user.email}) as ${user.role}`);
     res.json({ success: true, user: publicUser(user) });
   }));
 

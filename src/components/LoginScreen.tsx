@@ -154,7 +154,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
           </button>
 
           <p className="text-[11px] text-center text-slate-500 leading-relaxed pt-1">
-            Only accounts created by the Admin can sign in. Forgot your password? Ask an Admin to reset it.
+            Only accounts created by an Admin can sign in. Forgot your password? Ask an Admin to reset it.
           </p>
         </form>
       </div>
