@@ -729,6 +729,27 @@ export default function App() {
         </div>
       )}
 
+      {/* Pop-ups blocked in this browser → explain how to allow them */}
+      {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && !dismissedPermBanner && (
+        <div className="bg-amber-50 text-amber-950 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs border-b border-amber-300/80 z-10">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="p-1 rounded-md bg-amber-200/80 text-amber-900 shrink-0">
+              <BellRing className="w-3.5 h-3.5" />
+            </span>
+            <span className="min-w-0 leading-snug">
+              <strong>Screen pop-ups are blocked in this browser.</strong> To get pop-ups even when ContentOps isn't on screen: click the
+              icon left of the web address → <strong>Site settings</strong> → <strong>Notifications: Allow</strong>, then reload the page.
+            </span>
+          </div>
+          <button
+            onClick={() => setDismissedPermBanner(true)}
+            className="text-amber-800 hover:text-amber-950 text-xs px-1.5 py-1 shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Role scope banner for non-managers */}
       {!managerial && (
         <div className="border-b border-amber-300/80 px-4 sm:px-6 py-2.5 flex items-center gap-3 text-xs text-amber-950 z-10 backdrop-blur bg-amber-50/95">

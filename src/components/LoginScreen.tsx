@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, Lock, Mail, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { ContentFlowLogo } from './Logo';
 import { api } from '../lib/api';
+import { requestBrowserNotificationPermission, enablePushNotifications } from '../lib/notificationService';
 import type { User } from '../types';
 
 interface LoginScreenProps {
@@ -38,6 +39,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSignedIn, notice }) 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
+    // Ask Chrome once (on this click) to allow pop-ups, so they can appear on screen even when
+    // ContentOps is minimised or another app is open. Chrome only shows this question once.
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      requestBrowserNotificationPermission()
+        .then((p) => { if (p === 'granted') enablePushNotifications(); })
+        .catch(() => {});
+    }
     setIsLoggingIn(true);
     setError(null);
     try {
