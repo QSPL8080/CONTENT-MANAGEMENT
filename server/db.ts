@@ -429,6 +429,17 @@ class RelationalDatabase {
     if (!userWithHash || !userWithHash.password_hash || !plainPassword) return null;
     const match = await bcrypt.compare(plainPassword, userWithHash.password_hash);
     if (!match) return null;
+    // Keep the Admin's view of this password readable: if the stored copy is missing or was
+    // saved with a different key (e.g. data moved from another computer/server), refresh it now.
+    try {
+      const { rows } = await pool.query('SELECT password_enc FROM users WHERE id = $1', [userWithHash.id]);
+      if (decryptPassword(rows[0]?.password_enc) !== plainPassword) {
+        await pool.query('UPDATE users SET password_enc = $1 WHERE id = $2', [encryptPassword(plainPassword), userWithHash.id]);
+        await saveAccountsBackup(pool);
+      }
+    } catch (err: any) {
+      console.warn(`⚠️  Could not refresh stored password copy: ${err.message}`);
+    }
     const { password_hash, ...safeUser } = userWithHash;
     return safeUser;
   }

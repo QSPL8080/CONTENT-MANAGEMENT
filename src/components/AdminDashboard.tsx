@@ -255,68 +255,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* Attention Required Block */}
-      {attentionItems.length > 0 && (
-        <div className="bg-rose-50/80 border border-rose-200 rounded-2xl p-6 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2.5">
-              <AlertTriangle className="w-5 h-5 text-rose-600" />
-              <h3 className="font-bold text-rose-950 text-base">
-                Attention Required ({attentionItems.length})
-              </h3>
-            </div>
-            <span className="text-xs text-rose-700 font-medium">
-              Action needed to maintain daily publishing schedule
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-            {attentionItems.map((item) => {
-              const editor = allUsers.find(u => u.id === item.editor_id);
-              const poster = allUsers.find(u => u.id === item.poster_id);
-              const isOverduePosting = item.status === 'READY_TO_POST' && isOverdueItem(item);
-              const isOverdueEditing = (item.status === 'EDITING' || item.status === 'PLANNED') && isOverdueItem(item);
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => onSelectContent(item)}
-                  className="bg-white p-4 rounded-xl border border-rose-200/80 shadow-2xs hover:border-rose-400 hover:shadow-xs cursor-pointer transition-all flex flex-col justify-between space-y-3"
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-1 mb-2">
-                      <span className="text-xs font-bold text-slate-500">
-                        {item.scheduled_date} · {item.scheduled_time}
-                      </span>
-                      {isOverduePosting && <OverdueBadge type="posting" />}
-                      {isOverdueEditing && <OverdueBadge type="editing" />}
-                      {item.status === 'REVISION' && (
-                        <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded">
-                          Revision
-                        </span>
-                      )}
-                      {item.status === 'ISSUE' && (
-                        <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded">
-                          Issue
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-bold text-slate-900 text-sm line-clamp-1">
-                      {item.title}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-500 pt-2.5 border-t border-slate-100">
-                    <span>Creator: <strong className="text-slate-700">{editor?.name || 'None'}</strong></span>
-                    <span>Intern: <strong className="text-slate-700">{poster?.name || 'None'}</strong></span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Main Content Feed with Quick Filters (Spacious card) */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 lg:p-8 shadow-2xs space-y-5 sm:space-y-6 min-w-0">
         <div className="flex items-center justify-between gap-3 sm:gap-4 flex-wrap pb-4 border-b border-slate-100">

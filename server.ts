@@ -330,7 +330,7 @@ async function startServer() {
     const password = await db.revealPassword(target.id);
     res.setHeader('Cache-Control', 'no-store');
     if (password === null) {
-      return res.status(404).json({ error: 'This password cannot be shown. Set a new one with the edit button.' });
+      return res.status(404).json({ error: 'Not available yet — it appears after this person signs in once, or set a new one with the edit button.' });
     }
     await db.logActivity({
       user_id: req.user.id, user_name: req.user.name, user_role: req.user.role,
