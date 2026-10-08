@@ -409,7 +409,7 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                         ✓ Final {assetNoun.toLowerCase()} uploaded — Ready to Post
                       </div>
                       <div className="text-xs text-emerald-700 mt-0.5">
-                        Intern: <span className="font-semibold">{poster?.name || 'Unassigned'}</span> · Scheduled {content.scheduled_date} at {content.scheduled_time}.
+                        Intern: <span className="font-semibold">{poster?.name || 'Not assigned yet'}</span> · Scheduled {content.scheduled_date} at {content.scheduled_time}.
                       </div>
                     </div>
                   </div>
@@ -744,10 +744,14 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                       <div className="flex items-center gap-2 mt-1.5">
                         <UserAvatar user={poster} size="sm" />
                         <div>
-                          <span className="text-xs font-bold text-slate-800 block">
-                            {poster?.name || 'Unassigned'}
+                          <span className={`text-xs font-bold block ${poster ? 'text-slate-800' : 'text-amber-700'}`}>
+                            {poster?.name || 'Not assigned yet'}
                           </span>
-                          <span className="text-[10px] text-slate-500">Publishes on {content.platform.replace('_', ' ')}</span>
+                          <span className="text-[10px] text-slate-500">
+                            {poster
+                              ? `Publishes on ${content.platform.replace('_', ' ')}`
+                              : managerial ? 'Use Edit to assign an intern' : 'An Admin or Manager will assign one'}
+                          </span>
                         </div>
                       </div>
                     </div>

@@ -504,9 +504,10 @@ async function startServer() {
       internal_notes, tags, category,
     } = req.body;
 
-    if (!title || !scheduled_date || !scheduled_time || !editor_id || !poster_id) {
+    // The intern is optional — it can be assigned later by editing the content
+    if (!title || !scheduled_date || !scheduled_time || !editor_id) {
       return res.status(400).json({
-        error: 'Title, scheduled date, scheduled time, creator (designer/editor), and intern are required',
+        error: 'Title, scheduled date, scheduled time and the designer/editor are required',
       });
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date) || !/^\d{2}:\d{2}/.test(scheduled_time)) {
@@ -528,7 +529,7 @@ async function startServer() {
         scheduled_date,
         scheduled_time: String(scheduled_time).slice(0, 5),
         editor_id,
-        poster_id,
+        poster_id: poster_id || null,
         caption: caption || '',
         hashtags: hashtags || '',
         instructions: instructions || '',

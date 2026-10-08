@@ -68,7 +68,8 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
   const [scheduledTime, setScheduledTime] = useState(initialContent?.scheduled_time || '18:00');
   const [editorId, setEditorId] = useState(initialContent?.editor_id || pickDefaultCreator(initialType));
   const [editorTouched, setEditorTouched] = useState(isEdit);
-  const [posterId, setPosterId] = useState(initialContent?.poster_id || posters[0]?.id || '');
+  // Intern is optional: content can be created first and the intern assigned later
+  const [posterId, setPosterId] = useState(initialContent?.poster_id || '');
   const [caption, setCaption] = useState(initialContent?.caption || '');
   const [hashtags, setHashtags] = useState(initialContent?.hashtags || '');
   const [tagsText, setTagsText] = useState((initialContent?.tags || []).join(', '));
@@ -98,8 +99,8 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !scheduledDate || !scheduledTime || !editorId || !posterId) {
-      setError('Please fill out all required fields (title, date, time, creator and intern).');
+    if (!title.trim() || !scheduledDate || !scheduledTime || !editorId) {
+      setError('Please fill out all required fields (title, date, time and designer/editor).');
       return;
     }
 
@@ -118,7 +119,7 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
         scheduled_date: scheduledDate,
         scheduled_time: scheduledTime,
         editor_id: editorId,
-        poster_id: posterId,
+        poster_id: posterId, // '' = no intern yet
         caption: caption.trim(),
         hashtags: hashtags.trim(),
         instructions: instructions.trim(),
@@ -363,15 +364,14 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Intern (publishes it) <span className="text-rose-500">*</span>
+                  Intern (publishes it) <span className="text-slate-400 font-normal">— optional</span>
                 </label>
                 <select
-                  required
                   value={posterId}
                   onChange={(e) => setPosterId(e.target.value)}
                   className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none"
                 >
-                  {!posterId && <option value="">Select…</option>}
+                  <option value="">Not assigned yet</option>
                   {extraAssignee(posterId) && (
                     <option value={posterId}>{extraAssignee(posterId)!.name} (currently assigned)</option>
                   )}
@@ -381,7 +381,7 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-400 mt-1">Downloads, publishes and marks it as posted.</p>
+                <p className="text-[10px] text-slate-400 mt-1">Downloads, publishes and marks it as posted. You can assign the intern later by editing.</p>
               </div>
             </div>
           </div>

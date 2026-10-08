@@ -1301,7 +1301,9 @@ class RelationalDatabase {
     let note: { label: string; text: string } | undefined;
     if (kind === 'assigned' && item) {
       message = item.poster_id === user.id && item.editor_id !== user.id
-        ? `You have been assigned to publish this ${typeName} on ${cap(item.platform)}. You will be notified again when the final file is ready. The details are below.`
+        ? (item.status === 'READY_TO_POST'
+            ? `You have been assigned to publish this ${typeName} on ${cap(item.platform)}. The final file is already ready — please download it, publish it at the scheduled time and mark it as posted.`
+            : `You have been assigned to publish this ${typeName} on ${cap(item.platform)}. You will be notified again when the final file is ready. The details are below.`)
         : `You have been assigned to create this ${typeName}. Please review the details below and upload the final file before the scheduled time.`;
       if (item.instructions) note = { label: 'Instructions', text: item.instructions };
     } else if (kind === 'revision') {
