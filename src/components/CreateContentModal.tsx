@@ -65,7 +65,7 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
   const [category, setCategory] = useState<string>(initialContent?.category || 'Education');
   const [platform, setPlatform] = useState<Platform>(initialContent?.platform || 'instagram');
   const [scheduledDate, setScheduledDate] = useState(initialContent?.scheduled_date || defaultDate || localDateStr());
-  const [scheduledTime, setScheduledTime] = useState(initialContent?.scheduled_time || '18:00');
+  const [scheduledTime, setScheduledTime] = useState((initialContent?.scheduled_time || '18:00').slice(0, 5));
   const [editorId, setEditorId] = useState(initialContent?.editor_id || pickDefaultCreator(initialType));
   const [editorTouched, setEditorTouched] = useState(isEdit);
   // Intern is optional: content can be created first and the intern assigned later

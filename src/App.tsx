@@ -392,11 +392,12 @@ export default function App() {
     await refreshData();
   };
 
-  const handleMoveDate = async (newDate: string) => {
+  const handleMoveDate = async (newDate: string, newTime: string) => {
     const targetItem = moveDateModalContent || selectedContent;
     if (!targetItem) return;
 
-    await api.updateContent(targetItem.id, { scheduled_date: newDate });
+    const res = await api.updateContent(targetItem.id, { scheduled_date: newDate, scheduled_time: newTime });
+    if (selectedContent?.id === targetItem.id && res?.content) setSelectedContent(res.content);
     await refreshData();
   };
 
