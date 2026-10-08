@@ -1249,18 +1249,57 @@ class RelationalDatabase {
     // "Ready to post" is a task only for the intern who will publish it
     if (n.type === 'ready_to_post' && item?.poster_id !== user.id) return;
 
-    const time = (t?: string) => (t || '').slice(0, 5);
-    const cap = (v?: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : '');
+    const cap = (v?: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, ' ') : '');
+    const when = (date?: string, t?: string) => {
+      if (!date) return '';
+      const [y, m, d] = date.split('-').map(Number);
+      const [hh, mm] = (t || '00:00').split(':').map(Number);
+      const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0));
+      const day = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+      return t ? `${day}, ${dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}` : day;
+    };
+    const nameOf = async (id?: string | null) => (id ? (await this.getUserById(id))?.name || '' : '');
+    const kind = n.type as 'assigned' | 'revision' | 'ready_to_post';
+
     const details: [string, string][] = item
       ? [
-          ['Content', item.title],
-          ['Type', cap(item.content_type)],
+          ['Content type', cap(item.content_type)],
           ['Platform', cap(item.platform)],
-          ['Scheduled', `${item.scheduled_date} at ${time(item.scheduled_time)}`],
-          ['Instructions', item.instructions || ''],
+          ['Scheduled for', when(item.scheduled_date, item.scheduled_time)],
+          ['Designer / Editor', await nameOf(item.editor_id)],
+          ['Publishing (Intern)', await nameOf(item.poster_id)],
         ]
       : [];
-    sendTaskEmail({ to: user.email, toName: user.name, subject: n.title, message: n.message, details });
+
+    const typeName = cap(item?.content_type || 'content').toLowerCase();
+    const assignedBy = n.message.includes(' assigned you') ? n.message.split(' assigned you')[0] : '';
+    if (assignedBy && kind === 'assigned') details.unshift(['Assigned by', assignedBy]);
+
+    let message = n.message;
+    let note: { label: string; text: string } | undefined;
+    if (kind === 'assigned' && item) {
+      message = item.poster_id === user.id && item.editor_id !== user.id
+        ? `You have been assigned to publish this ${typeName} on ${cap(item.platform)}. You will be notified again when the final file is ready. The details are below.`
+        : `You have been assigned to create this ${typeName}. Please review the details below and upload the final file before the scheduled time.`;
+      if (item.instructions) note = { label: 'Instructions', text: item.instructions };
+    } else if (kind === 'revision') {
+      message = 'Changes have been requested on this content. Please review the notes below and upload an updated file.';
+      note = { label: 'Revision notes', text: n.message };
+    } else if (kind === 'ready_to_post') {
+      message = `The final file is ready. Please download it, publish it on ${cap(item?.platform)} at the scheduled time, and then mark it as posted with the post link.`;
+      if (item?.caption) note = { label: 'Caption', text: [item.caption, item.hashtags].filter(Boolean).join('\n\n') };
+    }
+
+    sendTaskEmail({
+      to: user.email,
+      toName: user.name,
+      kind,
+      subject: n.title,
+      heading: item?.title,
+      message,
+      details,
+      note,
+    });
   }
 
   async getNotifications(userId: string): Promise<AppNotification[]> {
