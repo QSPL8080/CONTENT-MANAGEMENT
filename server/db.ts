@@ -1385,7 +1385,6 @@ class RelationalDatabase {
 
       // --- Credentials -------------------------------------------------------------
       const teamPassword = process.env.TEAM_DEFAULT_PASSWORD || 'Quickupp@123';
-      const rosterEmails = TEAM_ROSTER.map(m => m.email.trim().toLowerCase());
 
       const setPassword = async (userId: string, plain: string, _unused?: boolean) => {
         await client.query(
@@ -1399,54 +1398,32 @@ class RelationalDatabase {
       // Purge any invalid/non-standard roles
       await client.query(`DELETE FROM users WHERE role NOT IN ('admin','manager','graphic_designer','editor','poster')`);
 
-      // 1) Make sure every roster member exists (new ones get the default team password)
-      for (const member of TEAM_ROSTER) {
-        const email = member.email.trim().toLowerCase();
-        const found = await client.query('SELECT id, password_hash FROM users WHERE LOWER(email) = $1', [email]);
-        if (found.rows.length === 0) {
+      // 1) Brand-new database only: create the team list with the default team password.
+      //    Once any account exists, startup NEVER touches accounts again — passwords people
+      //    changed, members the Admin edited, deactivated or removed all stay exactly as they are,
+      //    on this PC, on the server, or after copying the data to another database.
+      const { rows: [{ n: userCount }] } = await client.query('SELECT COUNT(*)::int AS n FROM users');
+      if (userCount === 0) {
+        for (const member of TEAM_ROSTER) {
           const id = newId('user');
           await client.query(
             `INSERT INTO users (id, name, email, password_hash, avatar, role, status)
              VALUES ($1, $2, $3, '', '', $4, 'active')`,
-            [id, member.name, email, member.role]
+            [id, member.name, member.email.trim().toLowerCase(), member.role]
           );
           await setPassword(id, teamPassword, true);
-          console.log(`✅ Added ${member.name} (${email})`);
-        } else if (!found.rows[0].password_hash) {
-          await setPassword(found.rows[0].id, teamPassword, true);
+          console.log(`✅ Added ${member.name} (${member.email.trim().toLowerCase()})`);
         }
+      } else {
+        // Safety net: an account that somehow has no password at all gets the default one.
+        const { rows: noPw } = await client.query(`SELECT id FROM users WHERE password_hash = ''`);
+        for (const r of noPw) await setPassword(r.id, teamPassword, true);
       }
 
-      // 2) Clean-up: keep ONLY the team list with fresh credentials.
-      //    Removes old/test accounts and signs everyone out.
+      // 2) Mark the old one-time clean-up as done. It used to delete accounts and reset
+      //    passwords; it must never run again.
       const CREDENTIALS_VERSION = 3;
-      const { rows: verRows } = await client.query('SELECT id, credentials_version FROM settings ORDER BY id LIMIT 1');
-      if (verRows[0] && verRows[0].credentials_version < CREDENTIALS_VERSION) {
-        const keep = [...rosterEmails];
-        const removed = await client.query(
-          `DELETE FROM users WHERE LOWER(email) <> ALL($1::text[]) RETURNING email`,
-          [keep]
-        );
-        for (const member of TEAM_ROSTER) {
-          const { rows } = await client.query('SELECT id, password_hash FROM users WHERE LOWER(email) = $1', [member.email.trim().toLowerCase()]);
-          if (!rows[0]) continue;
-          await client.query(
-            `UPDATE users SET name = $1, role = $2, status = 'active' WHERE id = $3`,
-            [member.name, member.role, rows[0].id]
-          );
-          // Only assign initial password if account has no password yet (NEVER overwrite existing user passwords)
-          if (!rows[0].password_hash) {
-            await setPassword(rows[0].id, teamPassword, true);
-          }
-        }
-        await client.query('DELETE FROM sessions');
-        await client.query('DELETE FROM notifications WHERE user_id NOT IN (SELECT id FROM users)');
-        await client.query('UPDATE settings SET credentials_version = $1 WHERE id = $2', [CREDENTIALS_VERSION, verRows[0].id]);
-        console.log(
-          `✅ Credentials reset: kept ${TEAM_ROSTER.length} team members` +
-          (removed.rows.length ? `, removed ${removed.rows.length} old account(s): ${removed.rows.map(r => r.email).join(', ')}` : '')
-        );
-      }
+      await client.query('UPDATE settings SET credentials_version = $1 WHERE credentials_version < $1', [CREDENTIALS_VERSION]);
       console.log(`🔐 Admin sign-in accounts configured`);
 
       await client.query('DELETE FROM sessions WHERE expires_at < NOW()');

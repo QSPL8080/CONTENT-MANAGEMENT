@@ -5,7 +5,13 @@ import { pgConnectionConfig } from '../server/pgConfig';
 dotenv.config();
 
 const LOCAL_URL = process.env.DATABASE_URL || 'postgresql://postgres:8080@localhost:5432/content_management';
-const SUPABASE_URL = 'postgresql://postgres.bcfhkztyrxjgvmgrxcns:QSPLProductions%408080@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres';
+// Target database link — set it in .env (never write passwords into the code):
+//   MIGRATE_TARGET_URL=postgresql://user:password@host:5432/postgres
+const SUPABASE_URL = process.env.MIGRATE_TARGET_URL || '';
+if (!SUPABASE_URL) {
+  console.error('❌ Set MIGRATE_TARGET_URL in .env to the database you want to copy into, then run again.');
+  process.exit(1);
+}
 
 const ROLE_CHECK = `CHECK (role IN ('admin','manager','graphic_designer','editor','poster'))`;
 
