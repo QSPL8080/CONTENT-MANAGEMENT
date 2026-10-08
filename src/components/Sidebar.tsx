@@ -274,7 +274,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block shrink-0 h-[calc(100vh-61px)] sticky top-[61px] z-20">
+      <aside className="hidden lg:block shrink-0 h-full z-20">
         {content}
       </aside>
 

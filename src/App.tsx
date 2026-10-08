@@ -596,7 +596,7 @@ export default function App() {
   const poster = isPoster(currentUser.role);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
+    <div className="h-dvh overflow-hidden bg-slate-100 flex flex-col font-sans text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
       {/* Global Topbar */}
       <Topbar
         currentUser={currentUser}
@@ -691,7 +691,7 @@ export default function App() {
       />
 
       {/* Main Layout Container */}
-      <div className="flex-1 flex w-full min-w-0">
+      <div className="flex-1 flex w-full min-w-0 min-h-0">
         {/* Navigation Sidebar */}
         <Sidebar
           currentUser={currentUser}
@@ -705,7 +705,7 @@ export default function App() {
         />
 
         {/* Main Content View Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 w-full overflow-x-hidden">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 w-full overflow-x-hidden overflow-y-auto">
           <div className="w-full min-w-0">
           {/* TAB 1: DASHBOARD (Adapts to Role) */}
           {currentTab === 'dashboard' && managerial && (
