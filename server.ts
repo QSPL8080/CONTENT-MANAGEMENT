@@ -167,15 +167,28 @@ async function startServer() {
   };
   const connectDatabase = async (): Promise<void> => {
     try {
+      // Existing database: answer requests within a second or two of starting up
+      if (!dbState.ready && (await db.quickStart())) {
+        dbState.ready = true;
+        dbState.error = null;
+        dbState.since = new Date().toISOString();
+        console.log('✅ Database reachable — serving requests (finishing start-up checks in the background)');
+      }
       await db.init();
       dbState.ready = true;
       dbState.error = null;
       dbState.since = new Date().toISOString();
     } catch (err: any) {
+      const msg = err.message || String(err);
+      if (dbState.ready) {
+        // Already serving from an existing database — keep going, just report it
+        console.error(`⚠️ [Database] Start-up checks did not finish (${msg}). The app keeps running.`);
+        return;
+      }
       dbState.ready = false;
-      dbState.error = err.message || String(err);
-      console.error(`⚠️ [Database] Not connected (${dbState.error}). Retrying in 30 s…`);
-      setTimeout(connectDatabase, 30_000);
+      dbState.error = msg;
+      console.error(`⚠️ [Database] Not connected (${msg}). Retrying in 15 s…`);
+      setTimeout(connectDatabase, 15_000);
     }
   };
   connectDatabase();
@@ -198,7 +211,7 @@ async function startServer() {
   app.use('/api', (_req, res, next) => {
     if (dbState.ready) return next();
     res.status(503).json({
-      error: `The server can't reach the database right now (${dbState.error}). It retries automatically every 30 seconds — check DATABASE_URL if this continues.`,
+      error: `The server can't reach the database right now (${dbState.error}). It retries automatically every 15 seconds — check DATABASE_URL if this continues.`,
     });
   });
 

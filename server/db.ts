@@ -486,6 +486,26 @@ class RelationalDatabase {
     }
   }
 
+  /**
+   * Quick start for an EXISTING database: load the shared keys and start serving requests
+   * straight away (a couple of queries), while init() finishes its upgrade checks in the
+   * background. Returns false for a new/empty database, which must wait for init().
+   */
+  async quickStart(): Promise<boolean> {
+    try {
+      const { rows } = await pool.query(
+        'SELECT vault_key FROM settings WHERE vault_key IS NOT NULL ORDER BY id LIMIT 1'
+      );
+      const { rows: u } = await pool.query('SELECT COUNT(*)::int AS n FROM users');
+      if (!rows[0]?.vault_key || !u[0]?.n) return false;
+      setSharedVaultKey(rows[0].vault_key);
+      await initPush(pool);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async createUser(user: { name: string; email: string; role: UserRole; avatar?: string; status?: string; password?: string; must_change_password?: boolean }): Promise<User> {
     const id = newId('user');
     const now = new Date().toISOString();
@@ -1530,7 +1550,16 @@ class RelationalDatabase {
       // Run statements one by one so a single optional step (e.g. an index on a legacy
       // database with odd data) cannot block startup.
       const statements = SCHEMA_SQL.split(/;\s*\n/).map(x => x.trim()).filter(Boolean);
-      for (const stmt of statements) {
+      // Fast path: send the whole schema in ONE round trip (a far-away database such as
+      // Supabase can take ~0.2 s per query). Only if that fails, go statement by statement.
+      let schemaDone = false;
+      try {
+        await client.query(statements.join(';\n') + ';');
+        schemaDone = true;
+      } catch {
+        schemaDone = false;
+      }
+      for (const stmt of schemaDone ? [] : statements) {
         try {
           await client.query(stmt);
         } catch (err: any) {

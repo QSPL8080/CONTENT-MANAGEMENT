@@ -33,14 +33,22 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      ...options,
-      headers,
-      credentials: 'same-origin',
-    });
-  } catch {
-    throw new ApiError('Network error — check your internet connection and try again.', 0);
+  // While the server is starting up (just deployed / waking up) it answers 503 for a few
+  // seconds — wait and try again quietly instead of showing an error.
+  const retryDelays = [1000, 2000, 3000, 4000, 5000, 5000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      response = await fetch(endpoint, {
+        ...options,
+        headers,
+        credentials: 'same-origin',
+      });
+    } catch {
+      throw new ApiError('Network error — check your internet connection and try again.', 0);
+    }
+    const retriable = response.status === 503 || response.status === 502 || response.status === 504;
+    if (!retriable || attempt >= retryDelays.length || options.body instanceof FormData) break;
+    await new Promise(r => setTimeout(r, retryDelays[attempt]));
   }
 
   if (!response.ok) {
