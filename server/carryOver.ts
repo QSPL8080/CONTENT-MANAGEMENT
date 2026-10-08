@@ -22,7 +22,7 @@ const TABLES_IN_ORDER = ['workspaces', 'users', 'settings', 'content_items', 'ac
 
 export const ACCOUNTS_BACKUP_FILE = path.join(DATA_DIR, 'accounts-backup.json');
 
-const ACCOUNT_COLUMNS = ['id', 'name', 'email', 'password_hash', 'password_enc', 'avatar', 'role', 'status', 'workspace_id', 'created_at', 'updated_at'];
+const ACCOUNT_COLUMNS = ['id', 'name', 'email', 'password_hash', 'password_enc', 'avatar', 'role', 'status', 'workspace_id', 'whatsapp', 'created_at', 'updated_at'];
 
 type Queryable = { query: (text: string, values?: any[]) => Promise<pg.QueryResult<any>> };
 

@@ -25,6 +25,8 @@ export interface User {
   /** The user must choose their own password at next sign-in (temporary/default password). */
   must_change_password?: boolean;
   last_login_at?: string;
+  /** WhatsApp number (Admins/Managers) — tickets they create can be sent to it. */
+  whatsapp?: string;
   created_at: string;
   updated_at: string;
 }

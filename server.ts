@@ -151,6 +151,14 @@ const asyncHandler =
   (req: Request, res: Response, next: NextFunction) =>
     Promise.resolve(fn(req as AuthedRequest, res, next)).catch(next);
 
+/** '' = no number; null = not a valid number. Keeps digits only (e.g. "+91 82618 90834" → "918261890834"). */
+function cleanWhatsapp(raw: unknown): string | null {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length < 10 || digits.length > 15) return null;
+  return digits;
+}
+
 function publicUser(u: User) {
   return u;
 }
@@ -338,8 +346,13 @@ async function startServer() {
   // -------------------------------------------------------------------------
   // Users / Team (FR-TEAM-1, FR-TEAM-2)
   // -------------------------------------------------------------------------
-  app.get('/api/users', asyncHandler(async (_req, res) => {
-    res.json({ users: await db.getUsers() });
+  app.get('/api/users', asyncHandler(async (req, res) => {
+    const users = await db.getUsers();
+    // WhatsApp numbers are only shown to Admins / Managers (and to the person themselves)
+    const showPhones = canManageContent(req.user.role);
+    res.json({
+      users: showPhones ? users : users.map(u => (u.id === req.user.id ? u : { ...u, whatsapp: '' })),
+    });
   }));
 
   app.post('/api/users', asyncHandler(async (req, res) => {
@@ -366,7 +379,9 @@ async function startServer() {
     if (password.length < 8) {
       return res.status(400).json({ error: 'Set a password of at least 8 characters for this member' });
     }
-    const newUser = await db.createUser({ name, email, role, password, status: 'active' });
+    const whatsapp = cleanWhatsapp(req.body?.whatsapp);
+    if (whatsapp === null) return res.status(400).json({ error: 'Enter a valid WhatsApp number (10 digits, or with country code).' });
+    const newUser = await db.createUser({ name, email, role, password, status: 'active', whatsapp });
     await db.logActivity({
       user_id: actor.id, user_name: actor.name, user_role: actor.role,
       action: 'user_added',
@@ -453,6 +468,11 @@ async function startServer() {
         return res.status(403).json({ error: `You cannot assign the ${roleLabel(role)} role.` });
       }
       updates.role = role;
+    }
+    if (req.body.whatsapp !== undefined) {
+      const whatsapp = cleanWhatsapp(req.body.whatsapp);
+      if (whatsapp === null) return res.status(400).json({ error: 'Enter a valid WhatsApp number (10 digits, or with country code).' });
+      updates.whatsapp = whatsapp;
     }
     if (req.body.status !== undefined && req.body.status !== target.status) {
       const status = req.body.status;

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { localDateStr } from '../lib/dates';
 import { User, ContentType, Platform, ContentItem, ContentStatus } from '../types';
 import { isCreator, isPoster, roleLabel } from '../lib/roles';
+import { ticketMessage, whatsappLink, whatsappDigits } from '../lib/whatsapp';
 import { X, Plus, Film, Calendar, Clock, UserCheck, FileText, Hash, Check } from 'lucide-react';
 
 interface CreateContentModalProps {
@@ -12,7 +13,9 @@ interface CreateContentModalProps {
   defaultContentType?: ContentType;
   /** When provided, the modal edits this item instead of creating a new one. */
   initialContent?: ContentItem;
-  onCreate: (data: Partial<ContentItem>) => Promise<void>;
+  onCreate: (data: Partial<ContentItem>) => Promise<ContentItem | void>;
+  /** The person creating the task — the ticket can go to their WhatsApp. */
+  currentUser?: User;
 }
 
 const DESIGN_TYPES: ContentType[] = ['carousel', 'static', 'story', 'announcement', 'thread'];
@@ -33,8 +36,11 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
   defaultContentType,
   initialContent,
   onCreate,
+  currentUser,
 }) => {
   const isEdit = Boolean(initialContent);
+  const myWhatsapp = whatsappDigits(currentUser?.whatsapp);
+  const [sendToWhatsApp, setSendToWhatsApp] = useState(true);
   const active = users.filter(u => u.status === 'active');
 
   // Creators = Graphic Designers + Video Editors; posting = Interns.
@@ -106,9 +112,20 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
 
     setIsSubmitting(true);
     setError(null);
+    // Ticket to the creator's WhatsApp: open the tab now (while this is still a click), fill it in
+    // once the task is saved — otherwise the browser would block it as a pop-up.
+    let waTab: Window | null = null;
+    if (!isEdit && myWhatsapp && sendToWhatsApp) {
+      waTab = window.open('', '_blank');
+      if (waTab) {
+        try { waTab.opener = null; } catch { /* ignore */ }
+        waTab.document.title = 'Opening WhatsApp…';
+        waTab.document.body.innerHTML = '<p style="font-family:sans-serif;color:#475569;padding:24px">Opening WhatsApp…</p>';
+      }
+    }
     try {
       const tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
-      await onCreate({
+      const saved = await onCreate({
         ...(isEdit && status !== initialContent?.status ? { status } : {}),
         tags,
         title: title.trim(),
@@ -126,8 +143,13 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
         reference_notes: referenceNotes.trim() || (isEdit ? '' : undefined),
         internal_notes: internalNotes.trim() || (isEdit ? '' : undefined),
       });
+      if (waTab) {
+        if (saved) waTab.location.href = whatsappLink(myWhatsapp, ticketMessage(saved, users));
+        else waTab.close();
+      }
       onClose();
     } catch (err: any) {
+      waTab?.close();
       setError(err.message || (isEdit ? 'Failed to save changes' : 'Failed to create content'));
     } finally {
       setIsSubmitting(false);
@@ -499,7 +521,18 @@ export const CreateContentModal: React.FC<CreateContentModalProps> = ({
           </div>
 
           {/* Footer Actions (always visible) */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-white shrink-0">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 flex flex-wrap items-center justify-end gap-3 bg-white shrink-0">
+            {!isEdit && myWhatsapp && (
+              <label className="mr-auto inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sendToWhatsApp}
+                  onChange={(e) => setSendToWhatsApp(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-600"
+                />
+                <span>Send ticket to my WhatsApp</span>
+              </label>
+            )}
             <button
               type="button"
               onClick={onClose}

@@ -18,12 +18,14 @@ export interface RosterEntry {
   name: string;
   email: string;
   role: UserRole;
+  /** WhatsApp number for "Send ticket on WhatsApp" (filled in only if the account has none yet) */
+  whatsapp?: string;
 }
 
 export const TEAM_ROSTER: RosterEntry[] = [
   // Admins
-  { name: 'Quickupp CMO', email: 'quickuppsoftech.cmo@gmail.com', role: 'admin' },
-  { name: 'Snehal Pawar', email: 'snehalpawar12014@gmail.com', role: 'admin' },
+  { name: 'Quickupp CMO', email: 'quickuppsoftech.cmo@gmail.com', role: 'admin', whatsapp: '8261890834' },
+  { name: 'Snehal Pawar', email: 'snehalpawar12014@gmail.com', role: 'admin', whatsapp: '8956583052' },
 
   // Manager (DMM) — email to be provided
   // { name: 'DMM', email: '<manager-email>@gmail.com', role: 'manager' },

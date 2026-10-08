@@ -205,6 +205,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enc TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS popups_seen_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp TEXT NOT NULL DEFAULT '';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS credentials_version INT NOT NULL DEFAULT 0;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS vault_key TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS vapid_public TEXT;
@@ -293,6 +294,7 @@ function rowToUser(r: Record<string, any>): User {
     has_password: Boolean(r.password_hash),
     must_change_password: Boolean(r.must_change_password),
     last_login_at: r.last_login_at ? iso(r.last_login_at) : undefined,
+    whatsapp: r.whatsapp || '',
     created_at: iso(r.created_at),
     updated_at: iso(r.updated_at),
   };
@@ -538,15 +540,15 @@ class RelationalDatabase {
     }
   }
 
-  async createUser(user: { name: string; email: string; role: UserRole; avatar?: string; status?: string; password?: string; must_change_password?: boolean }): Promise<User> {
+  async createUser(user: { name: string; email: string; role: UserRole; avatar?: string; status?: string; password?: string; must_change_password?: boolean; whatsapp?: string }): Promise<User> {
     const id = newId('user');
     const now = new Date().toISOString();
     const passwordHash = user.password ? await bcrypt.hash(user.password, 10) : '';
     const passwordEnc = user.password ? encryptPassword(user.password) : null;
     const { rows } = await pool.query(
-      `INSERT INTO users (id, name, email, password_hash, password_enc, avatar, role, status, must_change_password, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [id, user.name.trim(), user.email.trim().toLowerCase(), passwordHash, passwordEnc, user.avatar || '', user.role, user.status || 'active', Boolean(user.must_change_password), now, now]
+      `INSERT INTO users (id, name, email, password_hash, password_enc, avatar, role, status, must_change_password, whatsapp, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [id, user.name.trim(), user.email.trim().toLowerCase(), passwordHash, passwordEnc, user.avatar || '', user.role, user.status || 'active', Boolean(user.must_change_password), user.whatsapp || '', now, now]
     );
     await saveAccountsBackup(pool);
     return rowToUser(rows[0]);
@@ -557,7 +559,7 @@ class RelationalDatabase {
     const sets: string[] = [];
     const vals: any[] = [];
     let i = 1;
-    const allowed: (keyof User)[] = ['name', 'email', 'avatar', 'role', 'status'];
+    const allowed: (keyof User)[] = ['name', 'email', 'avatar', 'role', 'status', 'whatsapp'];
     for (const key of allowed) {
       if (key in updates && (updates as any)[key] !== undefined) {
         let v = (updates as any)[key];
@@ -1730,6 +1732,15 @@ class RelationalDatabase {
         // Safety net: an account that somehow has no password at all gets the default one.
         const { rows: noPw } = await client.query(`SELECT id FROM users WHERE password_hash = ''`);
         for (const r of noPw) await setPassword(r.id, teamPassword, true);
+      }
+
+      // WhatsApp numbers for "Send ticket on WhatsApp" — only where none has been set yet
+      for (const member of TEAM_ROSTER) {
+        if (!member.whatsapp) continue;
+        await client.query(
+          `UPDATE users SET whatsapp = $2 WHERE email = $1 AND COALESCE(whatsapp, '') = ''`,
+          [member.email.trim().toLowerCase(), member.whatsapp]
+        );
       }
 
       // 2) Mark the old one-time clean-up as done. It used to delete accounts and reset

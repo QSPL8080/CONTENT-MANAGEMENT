@@ -31,9 +31,10 @@ type FormState = {
   role: UserRole;
   status: 'active' | 'disabled';
   password: string;
+  whatsapp: string;
 };
 
-const EMPTY_FORM: FormState = { name: '', email: '', role: 'poster', status: 'active', password: '' };
+const EMPTY_FORM: FormState = { name: '', email: '', role: 'poster', status: 'active', password: '', whatsapp: '' };
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({
   users,
@@ -94,7 +95,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const openEdit = (user: User) => {
-    setForm({ name: user.name, email: user.email, role: user.role, status: user.status, password: '' });
+    setForm({ name: user.name, email: user.email, role: user.role, status: user.status, password: '', whatsapp: user.whatsapp || '' });
     setEditingUser(user);
     setError(null);
     setModalMode('edit');
@@ -129,12 +130,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           email: form.email.trim().toLowerCase(),
           role: form.role,
           password: form.password,
+          whatsapp: form.whatsapp.trim(),
         });
       } else if (editingUser) {
         const updates: Partial<User> & { password?: string } = {};
         if (form.name.trim() !== editingUser.name) updates.name = form.name.trim();
         if (form.email.trim().toLowerCase() !== editingUser.email) updates.email = form.email.trim().toLowerCase();
         if (form.role !== editingUser.role) updates.role = form.role;
+        if (form.whatsapp.trim() !== (editingUser.whatsapp || '')) updates.whatsapp = form.whatsapp.trim();
         if (isAdmin && form.status !== editingUser.status) updates.status = form.status;
         if (isAdmin && form.password) updates.password = form.password;
         if (Object.keys(updates).length > 0) {
@@ -302,6 +305,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                               {u.id === currentUser.id && <span className="text-slate-400 font-medium"> (you)</span>}
                             </h4>
                             <span className="text-[11px] text-slate-500 block truncate" title={u.email}>{u.email}</span>
+                            {u.whatsapp && (
+                              <span className="text-[11px] text-emerald-700 block truncate" title="WhatsApp">WhatsApp: {u.whatsapp}</span>
+                            )}
                           </div>
                         </div>
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${ROLE_BADGE_CLASSES[u.role]}`}>
@@ -472,6 +478,22 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="tm-whatsapp" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  WhatsApp number <span className="normal-case font-normal text-slate-400">(optional)</span>
+                </label>
+                <input
+                  id="tm-whatsapp"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="e.g. 8261890834"
+                  value={form.whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Tickets this person creates can be sent to this WhatsApp.</p>
               </div>
 
               <div>
