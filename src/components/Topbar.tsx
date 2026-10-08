@@ -398,7 +398,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                       {currentUser.role === 'admin'
                         ? 'Dashboard, content, users & settings'
                         : currentUser.role === 'manager'
-                        ? 'All content & assignments'
+                        ? 'Create, edit & delete content; assignments'
                         : currentUser.role === 'graphic_designer'
                         ? 'Assigned design work'
                         : currentUser.role === 'editor'

@@ -19,7 +19,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   admin: 'Full workspace & content control — create, assign, review, publish, and manage users, passwords and settings',
-  manager: 'Reviews and oversees content workflow (content created by Admins)',
+  manager: 'Creates, edits, assigns, reviews and deletes content (no user management or settings)',
   graphic_designer: 'Designs assigned posts and uploads final creatives',
   editor: 'Edits assigned videos and uploads final cuts',
   poster: 'Downloads final assets, publishes them and marks them posted',
@@ -67,15 +67,16 @@ export const canEditTeamInfo = (role?: string | null): boolean =>
 export const ADMIN_EDITABLE_ROLES: UserRole[] = ALL_ROLES;
 
 /**
- * Admin: create, edit, assign, review and delete content.
+ * Admin and Manager: create, edit, assign, review and delete content.
  */
-export const canManageContent = (role?: string | null): boolean => role === 'admin';
+export const canManageContent = (role?: string | null): boolean =>
+  role === 'admin' || role === 'manager';
 
 /**
- * Admin can delete content tasks if created incorrectly or needed to be removed.
+ * Admin and Manager can delete content tasks if created incorrectly or needed to be removed.
  */
 export const canDeleteContent = (role?: string | null): boolean =>
-  role === 'admin';
+  role === 'admin' || role === 'manager';
 
 /** Graphic Designers and Video Editors: produce and upload the final asset. */
 export const isCreator = (role?: string | null): boolean =>

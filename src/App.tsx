@@ -11,7 +11,7 @@ import {
   IssueType
 } from './types';
 import { api, onUnauthorized } from './lib/api';
-import { isManagerial, isCreator, isPoster, roleLabel, canManageContent } from './lib/roles';
+import { isManagerial, isCreator, isPoster, roleLabel, canManageContent, canManageTeam } from './lib/roles';
 import { LoginScreen } from './components/LoginScreen';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { ContentFlowLogo } from './components/Logo';
@@ -675,7 +675,7 @@ export default function App() {
           )}
 
           {/* TAB 6: TEAM MANAGEMENT (Admin) */}
-          {currentTab === 'team' && managerial && (
+          {currentTab === 'team' && canManageTeam(currentUser.role) && (
             <TeamManagement
               users={users}
               contentList={contentList}

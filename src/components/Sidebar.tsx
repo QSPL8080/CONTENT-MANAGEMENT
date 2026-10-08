@@ -66,12 +66,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'settings', label: 'Settings', icon: Settings, badge: null },
       ];
     } else if (isManagerial(currentRole)) {
-      // Manager
+      // Manager: full content control, but no user management or settings
       return [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'calendar', label: 'Content Calendar', icon: CalendarIcon, badge: null },
         { id: 'content', label: 'All Content', icon: Film, badge: metrics?.total },
-        { id: 'team', label: 'Team', icon: Users, badge: null },
         { id: 'activity', label: 'Activity', icon: Activity, badge: null },
       ];
     } else if (isCreator(currentRole)) {
