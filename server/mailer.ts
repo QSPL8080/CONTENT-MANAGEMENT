@@ -12,7 +12,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
  *   SMTP_USER=yourname@gmail.com
  *   SMTP_PASS=your-app-password
  *   MAIL_FROM="Quickupp ContentOps <yourname@gmail.com>"   # optional
- *   APP_URL=https://content.quickuppsoftech.com            # the button in the e-mail opens this
+ *   APP_URL=https://legalclaimscouncel.us                  # the button in the e-mail opens this
  *
  * If SMTP_HOST is not set, e-mails are skipped (in-app notifications still work).
  * Sending never blocks or breaks the action that triggered it.
@@ -21,6 +21,16 @@ import nodemailer, { type Transporter } from 'nodemailer';
 const BRAND = 'Quickupp ContentOps';
 const COMPANY = 'Quickupp Softech';
 const LOGO_CID = 'quickupp-logo';
+
+/** The live ContentOps site — used for links in e-mails. */
+export const LIVE_APP_URL = 'https://legalclaimscouncel.us';
+
+/** Link for e-mail buttons: APP_URL, unless it points to this computer (team members can't open that). */
+export function emailAppUrl(): string {
+  const configured = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  if (!configured || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(configured)) return LIVE_APP_URL;
+  return configured;
+}
 
 let transporter: Transporter | null = null;
 let warned = false;
@@ -87,7 +97,7 @@ export interface TaskEmail {
 }
 
 export function renderTaskEmail(mail: TaskEmail, logoSrc: string | null): { html: string; text: string } {
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const appUrl = emailAppUrl();
   const first = mail.toName.split(' ')[0] || mail.toName;
   const k = KIND_STYLE[mail.kind];
   const year = new Date().getFullYear();
