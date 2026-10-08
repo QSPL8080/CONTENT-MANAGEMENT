@@ -37,7 +37,7 @@ import {
 import type { ContentItem, ContentStatus, User, Platform } from './src/types';
 
 const PORT = Number(process.env.PORT || 3000);
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+import { UPLOADS_DIR } from './server/paths';
 // Express request augmented with the signed-in user
 interface AuthedRequest extends Request {
   user: User;

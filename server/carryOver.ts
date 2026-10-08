@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import pg from 'pg';
 import { pgConnectionConfig } from './pgConfig';
+import { DATA_DIR } from './paths';
 
 /**
  * Carry the latest data over when the app is pointed at a NEW, EMPTY database, so nobody
@@ -19,7 +20,7 @@ import { pgConnectionConfig } from './pgConfig';
 // Parents before children, so foreign keys are satisfied while copying.
 const TABLES_IN_ORDER = ['workspaces', 'users', 'settings', 'content_items', 'activity_logs', 'issues', 'notifications'];
 
-export const ACCOUNTS_BACKUP_FILE = path.join(process.cwd(), 'data', 'accounts-backup.json');
+export const ACCOUNTS_BACKUP_FILE = path.join(DATA_DIR, 'accounts-backup.json');
 
 const ACCOUNT_COLUMNS = ['id', 'name', 'email', 'password_hash', 'password_enc', 'avatar', 'role', 'status', 'workspace_id', 'created_at', 'updated_at'];
 

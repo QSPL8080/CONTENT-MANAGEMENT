@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { DATA_DIR } from './paths';
 
 /**
  * Password vault: keeps an AES-256-GCM encrypted copy of each user's CURRENT password so
@@ -10,7 +11,7 @@ import path from 'path';
  * saved to data/.vault-key. Keep that file — without it, stored passwords can't be revealed
  * (sign-in keeps working; Admins can just set new passwords).
  */
-const KEY_FILE = path.join(process.cwd(), 'data', '.vault-key');
+const KEY_FILE = path.join(DATA_DIR, '.vault-key');
 let cachedKey: Buffer | null = null;
 
 function getKey(): Buffer {

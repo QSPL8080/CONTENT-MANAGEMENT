@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { pool } from './db';
 
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+import { UPLOADS_DIR } from './paths';
 const TEMP_UPLOADS_DIR = path.join(UPLOADS_DIR, 'temp_chunks');
 
 export interface CleanupResult {
