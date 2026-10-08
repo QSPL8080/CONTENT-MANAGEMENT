@@ -369,3 +369,32 @@ export function triggerTaskAssignmentNotification(params: {
     onClick: params.onClick,
   });
 }
+
+/**
+ * Chrome / Windows desktop pop-ups are switched off — ContentOps shows its own pop-ups inside
+ * the app only. This removes anything an earlier version set up in this browser (the
+ * background worker and its push registration), so no Chrome pop-ups appear any more.
+ */
+export async function removeDesktopNotifications(): Promise<void> {
+  try {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) {
+      try {
+        const sub = await reg.pushManager?.getSubscription();
+        if (sub) {
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          }).catch(() => {});
+          await sub.unsubscribe().catch(() => {});
+        }
+      } catch { /* ignore */ }
+      await reg.unregister().catch(() => {});
+    }
+  } catch {
+    // ignore
+  }
+}

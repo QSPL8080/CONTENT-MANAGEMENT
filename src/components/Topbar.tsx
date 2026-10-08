@@ -23,12 +23,7 @@ import {
   LogOut,
   KeyRound
 } from 'lucide-react';
-import { 
-  playNotificationSound, 
-  requestBrowserNotificationPermission, 
-  sendDesktopNotification, 
-  getBrowserNotificationPermission 
-} from '../lib/notificationService';
+import { playNotificationSound } from '../lib/notificationService';
 
 interface TopbarProps {
   currentUser: User;
@@ -63,7 +58,6 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showSoundMenu, setShowSoundMenu] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [permissionState, setPermissionState] = useState<NotificationPermission | 'unsupported'>('default');
   const [soundTested, setSoundTested] = useState(false);
 
   const roleMenuRef = useRef<HTMLDivElement>(null);
@@ -71,10 +65,6 @@ export const Topbar: React.FC<TopbarProps> = ({
   const soundMenuRef = useRef<HTMLDivElement>(null);
 
   const unreadNotifications = notifications.filter(n => !n.read);
-
-  useEffect(() => {
-    setPermissionState(getBrowserNotificationPermission());
-  }, []);
 
   // Close menus on outside click
   useEffect(() => {
@@ -92,17 +82,6 @@ export const Topbar: React.FC<TopbarProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleEnableAlerts = async () => {
-    const res = await requestBrowserNotificationPermission();
-    setPermissionState(res);
-    playNotificationSound();
-    if (res === 'granted') {
-      sendDesktopNotification('Browser Desktop Alerts Active ✓', {
-        body: 'You will receive screen pop-up notifications with audio chime when tasks are assigned.',
-      });
-    }
-  };
 
   const getNotifIcon = (type?: string) => {
     switch (type) {
@@ -207,20 +186,16 @@ export const Topbar: React.FC<TopbarProps> = ({
             </button>
           )}
 
-          {/* Browser Alert & Chime Control */}
+          {/* Pop-ups & chime */}
           <div className="relative hidden sm:block" ref={soundMenuRef}>
             <button
               onClick={() => setShowSoundMenu(!showSoundMenu)}
-              className={`relative p-2 rounded-lg transition-colors border ${
-                permissionState === 'granted'
-                  ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:bg-emerald-100/60'
-                  : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-              title="Browser Pop-up & Audio Chime Settings"
-              aria-label="Browser Notification Settings"
+              className="relative p-2 rounded-lg transition-colors border border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:bg-emerald-100/60"
+              title="Pop-ups & sound"
+              aria-label="Pop-ups and sound"
             >
               <Volume2 className="w-4 h-4" />
-              <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ${permissionState === 'granted' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500" />
             </button>
 
             {showSoundMenu && (
@@ -230,33 +205,18 @@ export const Topbar: React.FC<TopbarProps> = ({
                     <BellRing className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900">Alerts &amp; Audio</h4>
+                    <h4 className="text-xs font-bold text-slate-900">Pop-ups &amp; Sound</h4>
                   </div>
                 </div>
 
                 <div className="py-3 space-y-3 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-600 font-medium">Desktop Alerts:</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                      permissionState === 'granted' 
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : permissionState === 'denied'
-                        ? 'bg-rose-100 text-rose-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {permissionState === 'granted' ? 'Active' : permissionState === 'denied' ? 'Blocked' : 'Off'}
-                    </span>
+                    <span className="text-slate-600 font-medium">Pop-ups (bottom-right):</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800">On</span>
                   </div>
-
-                  {permissionState !== 'granted' && permissionState !== 'unsupported' && (
-                    <button
-                      onClick={handleEnableAlerts}
-                      className="w-full py-1.5 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                    >
-                      <BellRing className="w-3.5 h-3.5" />
-                      <span>Enable Alerts</span>
-                    </button>
-                  )}
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Shown inside ContentOps. Anything that happened while it was closed pops up the next time you open it.
+                  </p>
 
                   <button
                     onClick={() => {

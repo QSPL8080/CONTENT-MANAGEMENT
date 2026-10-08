@@ -946,6 +946,25 @@ async function startServer() {
   }));
 
   // -------------------------------------------------------------------------
+  // Pop-ups inside ContentOps — what was missed while the app was closed
+  // -------------------------------------------------------------------------
+  app.post('/api/popups/missed', asyncHandler(async (req, res) => {
+    try {
+      res.json(await db.takeMissedPopups(req.user));
+    } catch (err: any) {
+      console.warn(`⚠️  Missed pop-ups unavailable: ${err.message}`);
+      res.json({ now: new Date().toISOString(), items: [] });
+    }
+  }));
+
+  app.post('/api/popups/seen', asyncHandler(async (req, res) => {
+    const kind = req.body?.kind === 'activity' ? 'activity' : 'notification';
+    const id = String(req.body?.id || '');
+    if (id) await db.markPopupSeen(req.user.id, kind, id).catch(() => {});
+    res.json({ success: true });
+  }));
+
+  // -------------------------------------------------------------------------
   // Notifications (always the signed-in user's own)
   // -------------------------------------------------------------------------
   app.get('/api/notifications', asyncHandler(async (req, res) => {

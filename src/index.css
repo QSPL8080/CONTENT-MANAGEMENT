@@ -49,6 +49,7 @@
 .toast-enter { animation: toast-enter 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .toast-timer { animation: toast-timer 8s linear forwards; }
 .toast-card:hover .toast-timer { animation-play-state: paused; }
+.toasts-paused .toast-timer { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .toast-enter { animation: none; }
 }

@@ -32,11 +32,6 @@ import { RevisionModal } from './components/RevisionModal';
 import { MoveDateModal } from './components/MoveDateModal';
 import { TaskNotificationToast, ToastItem } from './components/TaskNotificationToast';
 
-/** True while ContentOps is the tab the person is looking at — then pop-ups appear inside the page. */
-function pageInFront(): boolean {
-  return typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus();
-}
-
 /** Colour/icon of the in-app pop-up for each kind of activity (Admin). */
 function activityToastType(action: string): ToastItem['type'] {
   switch (action) {
@@ -58,15 +53,10 @@ function activityToastType(action: string): ToastItem['type'] {
       return 'general';
   }
 }
-import { 
-  playNotificationSound, 
-  sendDesktopNotification, 
+import {
+  playNotificationSound,
   initAudioOnGesture,
-  registerNotificationServiceWorker,
-  enablePushNotifications,
-  disablePushNotifications,
-  isPushActive,
-  requestBrowserNotificationPermission
+  removeDesktopNotifications,
 } from './lib/notificationService';
 import { Loader2, ShieldAlert, BellRing } from 'lucide-react';
 
@@ -80,15 +70,17 @@ export default function App() {
   const [issues, setIssues] = useState<ContentIssue[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  // Adds in-app pop-ups (bottom-right). Newest sits at the bottom; at most 4 on screen.
+  const shownToastIdsRef = React.useRef<Set<string>>(new Set());
+  // Adds pop-ups (bottom-right, inside ContentOps). 4 on screen at once, the rest wait their turn.
+  // A pop-up is never shown twice in the same visit.
   const showToasts = useCallback((items: ToastItem[]) => {
-    if (items.length === 0) return;
-    setToasts((prev) => {
-      const ids = new Set(items.map((i) => i.id));
-      return [...prev.filter((p) => !ids.has(p.id)), ...items].slice(-4);
-    });
+    const fresh = items.filter((i) => !shownToastIdsRef.current.has(i.id));
+    if (fresh.length === 0) return;
+    fresh.forEach((i) => shownToastIdsRef.current.add(i.id));
+    setToasts((prev) => [...prev, ...fresh].slice(-50));
   }, []);
   const closeToast = useCallback((id: string) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
+  const clearToasts = useCallback(() => setToasts([]), []);
   const [isLoading, setIsLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -170,29 +162,12 @@ export default function App() {
     onUnauthorized(() => resetToSignedOut('Your session has ended. Please sign in again.'));
   }, [resetToSignedOut]);
 
-  const [dismissedPermBanner, setDismissedPermBanner] = useState(false);
 
   useEffect(() => {
     loadInitialData();
     initAudioOnGesture();
-    registerNotificationServiceWorker();
-
-    // Listen for service worker notification click navigation
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      const handleSwMessage = (event: MessageEvent) => {
-        if (event.data && event.data.type === 'OPEN_TASK' && event.data.contentId) {
-          const targetId = event.data.contentId;
-          api.getContent().then((res) => {
-            const match = res.content.find((c: any) => c.id === targetId);
-            if (match) setSelectedContent(match);
-          });
-        }
-      };
-      navigator.serviceWorker.addEventListener('message', handleSwMessage);
-      return () => {
-        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
-      };
-    }
+    // Chrome / Windows pop-ups are off — remove anything an earlier version set up in this browser
+    removeDesktopNotifications();
   }, [loadInitialData]);
 
   // ── Auto-logout after 10 minutes of inactivity ──────────────────────────
@@ -244,7 +219,7 @@ export default function App() {
     };
   }, [currentUser, resetToSignedOut]);
 
-  // Admin: live desktop pop-up for every action anyone else takes (new task, status change,
+  // Admin: live pop-up (inside ContentOps) for every action anyone else takes (new task, status change,
   // uploads, ready to post, revisions, issues, password changes, …). Shown only — not saved.
   const lastActivityAtRef = React.useRef<string | null>(null);
   useEffect(() => {
@@ -286,42 +261,16 @@ export default function App() {
         const fromOthers = logs.filter((l) => l.user_id !== currentUser.id && l.action !== 'storage_cleanup');
         if (fromOthers.length === 0) return;
         playNotificationSound();
-        // Page open and in front → pop-ups inside ContentOps (bottom-right)
-        if (pageInFront()) {
-          showToasts(fromOthers.slice(-4).map((l) => ({
-            id: `activity-${l.id}`,
-            title: ACTIVITY_TITLES[l.action] || 'New activity',
-            message: l.description,
-            type: activityToastType(l.action),
-            content_id: l.content_id || null,
-          })));
-          refreshData();
-          return;
-        }
-        if (isPushActive()) { refreshData(); return; } // the server already sent these as desktop pop-ups
-        fromOthers.slice(-5).forEach((l) => {
-          sendDesktopNotification(ACTIVITY_TITLES[l.action] || '🔔 New activity', {
-            body: l.description,
-            tag: `activity-${l.id}`,
-            contentId: l.content_id || undefined,
-            persistent: false, // disappears by itself; many can arrive
-            onClick: () => {
-              if (l.content_id) {
-                api.getContent().then((r) => {
-                  const item = r.content.find((c: any) => c.id === l.content_id);
-                  if (item) setSelectedContent(item);
-                });
-              }
-            },
-          });
-        });
-        if (fromOthers.length > 5) {
-          sendDesktopNotification(`🔔 ${fromOthers.length - 5} more updates`, {
-            body: 'Open Activity to see everything.',
-            tag: `activity-more-${Date.now()}`,
-            persistent: false,
-          });
-        }
+        // Pop-ups inside ContentOps (bottom-right)
+        showToasts(fromOthers.map((l) => ({
+          id: `activity-${l.id}`,
+          title: ACTIVITY_TITLES[l.action] || 'New activity',
+          message: l.description,
+          type: activityToastType(l.action),
+          content_id: l.content_id || null,
+          created_at: l.created_at,
+        })));
+        api.markPopupSeen('activity', fromOthers[fromOthers.length - 1].id).catch(() => {});
         refreshData();
       } catch {
         // quiet fail on transient network poll
@@ -352,37 +301,17 @@ export default function App() {
           // 1. Synthesize audio chime
           playNotificationSound();
 
-          // 2. Desktop pop-up (bottom-right on Windows) for each new task notification — up to 3 at
-          //    once. Admins get their pop-ups from the live activity feed instead (no duplicates).
-          const inFront = pageInFront();
-          if (!inFront && currentUser.role !== 'admin' && !isPushActive()) {
-            newUnseen.slice(0, 3).forEach((n) => {
-              sendDesktopNotification(n.title, {
-                body: n.message,
-                tag: n.id,
-                contentId: n.content_id,
-                onClick: () => {
-                  if (n.content_id) {
-                    api.getContent().then((res) => {
-                      const item = res.content.find((c: any) => c.id === n.content_id);
-                      if (item) setSelectedContent(item);
-                    });
-                  }
-                },
-              });
-            });
-          }
-
-          // 3. In-app pop-ups (bottom-right) while ContentOps is in front — newest at the bottom.
+          // 2. Pop-ups inside ContentOps (bottom-right), oldest first.
           //    Admins get theirs from the live activity feed instead (no duplicates).
-          if (inFront && currentUser.role !== 'admin') {
-            showToasts(newUnseen.slice(0, 3).reverse());
+          if (currentUser.role !== 'admin') {
+            showToasts(newUnseen.slice().reverse());
+            api.markPopupSeen('notification', newUnseen[0].id).catch(() => {});
           }
 
-          // 4. Update notification state list
+          // 3. Update notification state list
           setNotifications(latestNotifs);
 
-          // 5. Trigger light background refresh so kanban & metrics update immediately
+          // 4. Trigger light background refresh so kanban & metrics update immediately
           refreshData();
         }
       } catch {
@@ -433,46 +362,28 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load workspace after sign-in:', err);
     }
-    // Pop up whatever arrived while they were away (new tasks, ready to post, revisions, …)
-    if (user.role !== 'admin') {
-      try {
-        const res = await api.getNotifications();
-        const unread = (res.notifications || []).filter((n: AppNotification) => !n.read && n.user_id === user.id);
-        if (unread.length > 0) {
-          playNotificationSound();
-          if (pageInFront()) {
-            const items: ToastItem[] = unread.slice(0, 3).reverse();
-            if (unread.length > 3) {
-              items.unshift({
-                id: `login-more-${Date.now()}`,
-                title: `${unread.length - 3} more notifications`,
-                message: 'Open the bell at the top to see all of them.',
-                type: 'general',
-              });
-            }
-            showToasts(items);
-          } else {
-            unread.slice(0, 3).forEach((n: AppNotification) => {
-              sendDesktopNotification(n.title, { body: n.message, tag: n.id, contentId: n.content_id });
-            });
-            if (unread.length > 3) {
-              sendDesktopNotification(`🔔 ${unread.length - 3} more notifications`, {
-                body: 'Open the bell in ContentOps to see all of them.',
-                tag: `login-more-${Date.now()}`,
-              });
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
+    // What arrived while they were away pops up via the "missed pop-ups" step below
   }, [loadWorkspaceData]);
 
-  // Register this browser for push pop-ups whenever someone is signed in and has allowed them
+  // Whenever ContentOps is opened (sign-in or page load): pop up everything that happened while
+  // it was closed — Admins: all team activity; everyone else: their tasks, revisions, issues, …
+  const currentUserId = currentUser?.id;
   useEffect(() => {
-    if (currentUser) enablePushNotifications();
-  }, [currentUser]);
+    if (!currentUserId) return;
+    let cancelled = false;
+    api.getMissedPopups()
+      .then((res) => {
+        if (cancelled) return;
+        if (currentUser?.role === 'admin' && res.now) lastActivityAtRef.current = res.now;
+        if (res.items.length > 0) {
+          playNotificationSound();
+          showToasts(res.items);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
 
   // Opened from a pop-up while the app was closed (…/?content_id=…): show that task
   useEffect(() => {
@@ -487,7 +398,6 @@ export default function App() {
   }, [currentUser]);
 
   const handleLogout = async () => {
-    await disablePushNotifications();
     try {
       await api.logout();
     } catch (err) {
@@ -691,65 +601,6 @@ export default function App() {
         }}
       />
 
-      {/* Screen Pop-up Notification Permission Banner */}
-      {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default' && !dismissedPermBanner && (
-        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs border-b border-blue-800 shadow-inner z-10">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="p-1 rounded-md bg-blue-800/80 text-blue-200 shrink-0">
-              <BellRing className="w-3.5 h-3.5 animate-bounce" />
-            </span>
-            <span className="min-w-0 leading-snug">
-              <strong>Global Screen Pop-ups:</strong> Enable browser notifications to get alerts on your screen whenever a task is published, completed, reviewed, or assigned.
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={async () => {
-                const res = await requestBrowserNotificationPermission();
-                playNotificationSound();
-                if (res === 'granted') {
-                  enablePushNotifications();
-                  sendDesktopNotification('🚀 Screen Pop-up Alerts Enabled!', {
-                    body: 'You will now receive desktop pop-ups with chime whenever tasks are published, completed, reviewed, or assigned.',
-                  });
-                }
-                setDismissedPermBanner(true);
-              }}
-              className="px-3 py-1 bg-white hover:bg-blue-50 text-blue-950 font-bold rounded-lg shadow-sm transition-colors text-xs"
-            >
-              Enable Screen Pop-ups
-            </button>
-            <button
-              onClick={() => setDismissedPermBanner(true)}
-              className="text-blue-300 hover:text-white text-xs px-1.5 py-1"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Pop-ups blocked in this browser → explain how to allow them */}
-      {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && !dismissedPermBanner && (
-        <div className="bg-amber-50 text-amber-950 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs border-b border-amber-300/80 z-10">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="p-1 rounded-md bg-amber-200/80 text-amber-900 shrink-0">
-              <BellRing className="w-3.5 h-3.5" />
-            </span>
-            <span className="min-w-0 leading-snug">
-              <strong>Screen pop-ups are blocked in this browser.</strong> To get pop-ups even when ContentOps isn't on screen: click the
-              icon left of the web address → <strong>Site settings</strong> → <strong>Notifications: Allow</strong>, then reload the page.
-            </span>
-          </div>
-          <button
-            onClick={() => setDismissedPermBanner(true)}
-            className="text-amber-800 hover:text-amber-950 text-xs px-1.5 py-1 shrink-0"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
       {/* Role scope banner for non-managers */}
       {!managerial && (
         <div className="border-b border-amber-300/80 px-4 sm:px-6 py-2.5 flex items-center gap-3 text-xs text-amber-950 z-10 backdrop-blur bg-amber-50/95">
@@ -765,10 +616,11 @@ export default function App() {
         </div>
       )}
 
-      {/* In-app pop-ups, bottom-right */}
+      {/* Pop-ups, bottom-right */}
       <TaskNotificationToast
         toasts={toasts}
         onClose={closeToast}
+        onClearAll={clearToasts}
         onOpenTask={(contentId) => {
           const item = contentList.find(c => c.id === contentId);
           if (item) setSelectedContent(item);

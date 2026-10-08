@@ -18,7 +18,7 @@ import { encryptPassword, decryptPassword, envVaultKey, setSharedVaultKey, newVa
 import { pgConnectionConfig, isLocalDatabase } from './pgConfig';
 import { copyFromPreviousDatabase, restoreAccountsBackup, saveAccountsBackup } from './carryOver';
 import { sendTaskEmail, emailConfigured } from './mailer';
-import { initPush, pushToUsers, ACTIVITY_TITLES } from './push';
+import { initPush, ACTIVITY_TITLES } from './push';
 
 dotenv.config();
 
@@ -204,6 +204,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAULT 'd
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enc TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS popups_seen_at TIMESTAMPTZ;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS credentials_version INT NOT NULL DEFAULT 0;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS vault_key TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS vapid_public TEXT;
@@ -245,6 +246,37 @@ WHERE NOT EXISTS (SELECT 1 FROM settings);
 // ---------------------------------------------------------------------------
 // Row → domain-type helpers
 // ---------------------------------------------------------------------------
+
+export interface MissedPopup {
+  id: string;
+  title: string;
+  message: string;
+  type: AppNotification['type'];
+  content_id: string | null;
+  created_at: string;
+}
+
+/** Colour/icon of an Admin's pop-up for each kind of activity. */
+function activityPopupType(action: string): AppNotification['type'] {
+  switch (action) {
+    case 'created_content':
+    case 'reassigned_creator':
+    case 'reassigned_poster':
+      return 'assigned';
+    case 'uploaded_final_video':
+    case 'replaced_final_video':
+      return 'ready_to_post';
+    case 'marked_posted':
+    case 'added_post_url':
+      return 'posted';
+    case 'revision_requested':
+      return 'revision';
+    case 'reported_issue':
+      return 'issue';
+    default:
+      return 'general';
+  }
+}
 
 function iso(v: any): string {
   return new Date(v).toISOString();
@@ -1268,20 +1300,8 @@ class RelationalDatabase {
         log.metadata ? JSON.stringify(log.metadata) : null, now,
       ]
     );
-    const saved = rowToLog(rows[0]);
-    // Admins: live desktop pop-up for every action by someone else (not stored as a notification)
-    if (saved.action !== 'storage_cleanup') {
-      pool.query(`SELECT id FROM users WHERE role = 'admin' AND status = 'active' AND id <> $1`, [saved.user_id])
-        .then(({ rows: admins }) => pushToUsers(pool, admins.map(a => a.id), {
-          title: ACTIVITY_TITLES[saved.action] || '🔔 New activity',
-          body: saved.description,
-          tag: `activity-${saved.id}`,
-          contentId: saved.content_id ?? null,
-          persistent: false,
-        }))
-        .catch(() => {});
-    }
-    return saved;
+    // Admins see this as a pop-up inside ContentOps (live, or the next time they open it).
+    return rowToLog(rows[0]);
   }
 
   async getActivityLogs(contentId?: string, limit = 50, visibleTo?: User, since?: string): Promise<ActivityLog[]> {
@@ -1327,18 +1347,7 @@ class RelationalDatabase {
       [id, notif.user_id, notif.title, notif.message, notif.content_id ?? null, notif.type || 'general', now]
     );
     const created = rowToNotif(rows[0]);
-    // Desktop pop-up through the browser (works even when ContentOps isn't open).
-    // Admins get pop-ups from the activity feed instead (see logActivity).
-    pool.query('SELECT role FROM users WHERE id = $1', [created.user_id])
-      .then(({ rows: r }) => {
-        if (r[0] && r[0].role !== 'admin') {
-          pushToUsers(pool, [created.user_id], {
-            title: created.title, body: created.message, tag: created.id,
-            contentId: created.content_id ?? null, persistent: true,
-          });
-        }
-      })
-      .catch(() => {});
+    // Shown as a pop-up inside ContentOps (live, or the next time the person opens it).
     // E-mail the person when this notification gives them work to do (runs in the background)
     if (TASK_EMAIL_TYPES.has(created.type || 'general') && emailConfigured()) {
       this.emailTaskNotification(created).catch(err =>
@@ -1415,6 +1424,64 @@ class RelationalDatabase {
       details,
       note,
     });
+  }
+
+  /**
+   * Pop-ups this person missed while ContentOps was closed (oldest first, at most 50), and
+   * marks them as shown. Admins: everything the team did. Everyone else: their notifications.
+   */
+  async takeMissedPopups(user: User): Promise<{ now: string; items: MissedPopup[] }> {
+    const { rows: t } = await pool.query('SELECT NOW() AS now, popups_seen_at FROM users WHERE id = $1', [user.id]);
+    if (!t[0]) return { now: new Date().toISOString(), items: [] };
+    const now = t[0].now;
+    const seen = t[0].popups_seen_at ?? null;
+    let items: MissedPopup[] = [];
+    if (user.role === 'admin') {
+      if (seen) {
+        const { rows } = await pool.query(
+          `SELECT * FROM (
+             SELECT * FROM activity_logs
+              WHERE created_at > $1 AND created_at <= $2 AND user_id <> $3 AND action <> 'storage_cleanup'
+              ORDER BY created_at DESC LIMIT 50
+           ) x ORDER BY created_at ASC`,
+          [seen, now, user.id]
+        );
+        items = rows.map(r => ({
+          id: `activity-${r.id}`,
+          title: ACTIVITY_TITLES[r.action] || 'New activity',
+          message: r.description,
+          type: activityPopupType(r.action),
+          content_id: r.content_id ?? null,
+          created_at: iso(r.created_at),
+        }));
+      }
+    } else {
+      const { rows } = await pool.query(
+        `SELECT * FROM (
+           SELECT * FROM notifications
+            WHERE user_id = $1 AND created_at <= $2 AND ${seen ? 'created_at > $3' : 'read = FALSE'}
+            ORDER BY created_at DESC LIMIT 50
+         ) x ORDER BY created_at ASC`,
+        seen ? [user.id, now, seen] : [user.id, now]
+      );
+      items = rows.map(r => {
+        const n = rowToNotif(r);
+        return { id: n.id, title: n.title, message: n.message, type: n.type || 'general', content_id: n.content_id ?? null, created_at: n.created_at };
+      });
+    }
+    await pool.query('UPDATE users SET popups_seen_at = $2 WHERE id = $1', [user.id, now]);
+    return { now: iso(now), items };
+  }
+
+  /** The app showed this pop-up live — don't show it again next time ContentOps is opened. */
+  async markPopupSeen(userId: string, kind: 'activity' | 'notification', id: string): Promise<void> {
+    const table = kind === 'activity' ? 'activity_logs' : 'notifications';
+    await pool.query(
+      `UPDATE users SET popups_seen_at = GREATEST(COALESCE(popups_seen_at, 'epoch'::timestamptz), x.created_at)
+         FROM (SELECT created_at FROM ${table} WHERE id = $2) x
+        WHERE users.id = $1`,
+      [userId, id]
+    );
   }
 
   async getNotifications(userId: string): Promise<AppNotification[]> {

@@ -227,6 +227,16 @@ export const api = {
     request<{ success: boolean }>(`/api/notifications/${id}/read`, {
       method: 'PATCH',
     }),
+  // Pop-ups missed while ContentOps was closed (marks them as shown)
+  getMissedPopups: () =>
+    request<{ now: string; items: { id: string; title: string; message: string; type?: AppNotification['type']; content_id?: string | null; created_at?: string }[] }>(
+      '/api/popups/missed', { method: 'POST' }
+    ),
+  markPopupSeen: (kind: 'activity' | 'notification', id: string) =>
+    request<{ success: boolean }>('/api/popups/seen', {
+      method: 'POST',
+      body: JSON.stringify({ kind, id }),
+    }),
   markAllNotificationsRead: () =>
     request<{ success: boolean }>('/api/notifications/read-all', {
       method: 'POST',

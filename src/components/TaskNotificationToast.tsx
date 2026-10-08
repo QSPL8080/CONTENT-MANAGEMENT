@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppNotification } from '../types';
 import {
   BellRing,
@@ -12,9 +12,10 @@ import {
 } from 'lucide-react';
 
 /**
- * In-app pop-ups, shown bottom-right inside ContentOps while the page is open and in front.
- * (When the page is in the background, the Windows/Chrome desktop pop-up is used instead.)
- * Up to 4 stack on top of each other; each closes by itself after ~8 s — hovering pauses it.
+ * ContentOps pop-ups, shown bottom-right inside the app (no Chrome / Windows pop-ups).
+ * Up to 4 are on screen at once; the rest wait their turn (“+N more”). Each closes by itself
+ * after ~8 s of being seen. The timer waits while the mouse is over a pop-up and while
+ * ContentOps is in the background, so nothing disappears before the person has seen it.
  */
 
 export interface ToastItem {
@@ -29,6 +30,7 @@ export interface ToastItem {
 interface TaskNotificationToastProps {
   toasts: ToastItem[];
   onClose: (id: string) => void;
+  onClearAll: () => void;
   onOpenTask: (contentId: string) => void;
 }
 
@@ -84,6 +86,19 @@ const STYLES: Record<string, { label: string; accent: string; iconBox: string; b
   },
 };
 
+/** "now", "5 min ago", "2 h ago", "3 days ago" */
+function timeAgo(when?: string): string {
+  const t = when ? Date.parse(when) : NaN;
+  if (Number.isNaN(t)) return 'now';
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
 /** Removes a leading emoji / symbol from a title ("🆕 New task" → "New task"). */
 function cleanTitle(title: string): string {
   return title.replace(/^[^\p{L}\p{N}"'“(]+/u, '').trim() || title;
@@ -113,7 +128,7 @@ const ToastCard: React.FC<{
           <span className="text-slate-300">•</span>
           <span>{style.label}</span>
           <span className="text-slate-300">•</span>
-          <span>now</span>
+          <span>{timeAgo(toast.created_at)}</span>
           <button
             onClick={() => onClose(toast.id)}
             className="ml-auto -mr-1 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -161,11 +176,43 @@ const ToastCard: React.FC<{
   );
 };
 
-export const TaskNotificationToast: React.FC<TaskNotificationToastProps> = ({ toasts, onClose, onOpenTask }) => {
+function pageInFront(): boolean {
+  return typeof document === 'undefined' || (document.visibilityState === 'visible' && document.hasFocus());
+}
+
+const MAX_ON_SCREEN = 4;
+
+export const TaskNotificationToast: React.FC<TaskNotificationToastProps> = ({ toasts, onClose, onClearAll, onOpenTask }) => {
+  const [inFront, setInFront] = useState(pageInFront);
+
+  useEffect(() => {
+    const update = () => setInFront(pageInFront());
+    document.addEventListener('visibilitychange', update);
+    window.addEventListener('focus', update);
+    window.addEventListener('blur', update);
+    return () => {
+      document.removeEventListener('visibilitychange', update);
+      window.removeEventListener('focus', update);
+      window.removeEventListener('blur', update);
+    };
+  }, []);
+
   if (toasts.length === 0) return null;
+  const visible = toasts.slice(0, MAX_ON_SCREEN);
+  const waiting = toasts.length - visible.length;
+
   return (
-    <div className="fixed z-[60] bottom-4 right-4 left-4 sm:left-auto sm:w-[380px] flex flex-col items-stretch gap-2.5 pointer-events-none">
-      {toasts.map((t) => (
+    <div className={`fixed z-[60] bottom-4 right-4 left-4 sm:left-auto sm:w-[380px] flex flex-col items-stretch gap-2.5 pointer-events-none ${inFront ? '' : 'toasts-paused'}`}>
+      {(waiting > 0 || toasts.length > 1) && (
+        <div className="pointer-events-auto self-end flex items-center gap-2 rounded-full bg-white/95 border border-slate-200 shadow-sm px-3 py-1 text-[11px] text-slate-600">
+          {waiting > 0 && <span className="font-semibold text-slate-800">+{waiting} more</span>}
+          {waiting > 0 && <span className="text-slate-300">•</span>}
+          <button onClick={onClearAll} className="font-semibold text-blue-600 hover:text-blue-700">
+            Clear all
+          </button>
+        </div>
+      )}
+      {visible.map((t) => (
         <ToastCard key={t.id} toast={t} onClose={onClose} onOpenTask={onOpenTask} />
       ))}
     </div>
