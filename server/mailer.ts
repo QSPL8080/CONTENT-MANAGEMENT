@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import nodemailer, { type Transporter } from 'nodemailer';
 
 /**
@@ -20,7 +18,6 @@ import nodemailer, { type Transporter } from 'nodemailer';
 
 const BRAND = 'Quickupp ContentOps';
 const COMPANY = 'Quickupp Softech';
-const LOGO_CID = 'quickupp-logo';
 
 /** The live ContentOps site — used for links in e-mails. */
 export const LIVE_APP_URL = 'https://legalclaimscouncel.us';
@@ -58,17 +55,6 @@ function getTransporter(): Transporter | null {
     });
   }
   return transporter;
-}
-
-/** The logo is embedded in the e-mail itself, so it shows even before the site is online. */
-function logoPath(): string | null {
-  for (const p of [
-    path.join(process.cwd(), 'public', 'email-logo.png'),
-    path.join(process.cwd(), 'dist', 'email-logo.png'),
-  ]) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
 }
 
 const esc = (s: string) =>
@@ -112,7 +98,7 @@ export function renderTaskEmail(mail: TaskEmail, logoSrc: string | null): { html
     .join('');
 
   const logo = logoSrc
-    ? `<img src="${esc(logoSrc)}" width="180" alt="${BRAND}" style="display:block;width:180px;max-width:180px;height:auto;border:0;outline:none;text-decoration:none">`
+    ? `<img src="${esc(logoSrc)}" width="180" alt="${BRAND}" style="display:block;width:180px;max-width:180px;height:auto;border:0;outline:none;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;color:#0f172a">`
     : `<span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;color:#0f172a">${BRAND}</span>`;
 
   const html = `<!DOCTYPE html>
@@ -219,8 +205,10 @@ export function renderTaskEmail(mail: TaskEmail, logoSrc: string | null): { html
 export function sendTaskEmail(mail: TaskEmail): void {
   const t = getTransporter();
   if (!t || !mail.to) return;
-  const logo = logoPath();
-  const { html, text } = renderTaskEmail(mail, logo ? `cid:${LOGO_CID}` : null);
+  // Logo is loaded from the live website (Gmail shows embedded images as attachments).
+  // Override with EMAIL_LOGO_URL if the logo is hosted somewhere else.
+  const logoUrl = process.env.EMAIL_LOGO_URL || `${emailAppUrl()}/email-logo.png`;
+  const { html, text } = renderTaskEmail(mail, logoUrl);
   const from = process.env.MAIL_FROM || (process.env.SMTP_USER ? `"${BRAND}" <${process.env.SMTP_USER}>` : `"${BRAND}" <no-reply@localhost>`);
   t.sendMail({
     from,
@@ -228,7 +216,6 @@ export function sendTaskEmail(mail: TaskEmail): void {
     subject: mail.subject,
     html,
     text,
-    attachments: logo ? [{ filename: 'quickupp-logo.png', path: logo, cid: LOGO_CID, contentDisposition: 'inline' }] : [],
   })
     .then(() => console.log(`✉️  Task e-mail sent to ${mail.to}: ${mail.subject}`))
     .catch((err: any) => console.warn(`⚠️  Could not send e-mail to ${mail.to}: ${err.message}`));

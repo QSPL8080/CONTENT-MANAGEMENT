@@ -1319,7 +1319,11 @@ class RelationalDatabase {
         ]
       : [];
 
-    const typeName = cap(item?.content_type || 'content').toLowerCase();
+    const TYPE_WORDS: Record<string, string> = {
+      reel: 'reel', short: 'short video', carousel: 'carousel', static: 'static post',
+      story: 'story', thread: 'thread', announcement: 'announcement', other: 'content piece',
+    };
+    const typeName = TYPE_WORDS[item?.content_type || ''] || 'content piece';
     const assignedBy = n.message.includes(' assigned you') ? n.message.split(' assigned you')[0] : '';
     if (assignedBy && kind === 'assigned') details.unshift(['Assigned by', assignedBy]);
 
