@@ -1428,13 +1428,16 @@ class RelationalDatabase {
           [keep]
         );
         for (const member of TEAM_ROSTER) {
-          const { rows } = await client.query('SELECT id FROM users WHERE LOWER(email) = $1', [member.email.trim().toLowerCase()]);
+          const { rows } = await client.query('SELECT id, password_hash FROM users WHERE LOWER(email) = $1', [member.email.trim().toLowerCase()]);
           if (!rows[0]) continue;
           await client.query(
             `UPDATE users SET name = $1, role = $2, status = 'active' WHERE id = $3`,
             [member.name, member.role, rows[0].id]
           );
-          await setPassword(rows[0].id, teamPassword, true);
+          // Only assign initial password if account has no password yet (NEVER overwrite existing user passwords)
+          if (!rows[0].password_hash) {
+            await setPassword(rows[0].id, teamPassword, true);
+          }
         }
         await client.query('DELETE FROM sessions');
         await client.query('DELETE FROM notifications WHERE user_id NOT IN (SELECT id FROM users)');
