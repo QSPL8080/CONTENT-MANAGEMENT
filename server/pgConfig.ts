@@ -37,7 +37,12 @@ export function pgConnectionConfig(url: string): PoolConfig {
     connectionString = u.toString();
   } catch { /* unusual URL — use as given */ }
 
-  const config: PoolConfig = { connectionString };
+  // Give up on a connection attempt after 15 s instead of waiting forever (a paused or
+  // unreachable database must not freeze the whole app).
+  const config: PoolConfig = {
+    connectionString,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 15000,
+  };
   if (usesSsl(url)) {
     const caPath = process.env.DATABASE_SSL_CA;
     config.ssl = caPath && fs.existsSync(caPath)

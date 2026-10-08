@@ -159,11 +159,25 @@ async function startServer() {
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
 
-  try {
-    await db.init();
-  } catch (err: any) {
-    console.error('⚠️ [Database] Initial connection/migration error:', err.message);
-  }
+  // Connect to the database in the background so the website always starts and answers,
+  // even when the database is slow or unreachable. Keeps retrying every 30 s until it works.
+  const dbState: { ready: boolean; error: string | null; since: string } = {
+    ready: false, error: 'Connecting to the database…', since: new Date().toISOString(),
+  };
+  const connectDatabase = async (): Promise<void> => {
+    try {
+      await db.init();
+      dbState.ready = true;
+      dbState.error = null;
+      dbState.since = new Date().toISOString();
+    } catch (err: any) {
+      dbState.ready = false;
+      dbState.error = err.message || String(err);
+      console.error(`⚠️ [Database] Not connected (${dbState.error}). Retrying in 30 s…`);
+      setTimeout(connectDatabase, 30_000);
+    }
+  };
+  connectDatabase();
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -172,7 +186,19 @@ async function startServer() {
   // Public endpoints
   // -------------------------------------------------------------------------
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.status(dbState.ready ? 200 : 503).json({
+      status: dbState.ready ? 'ok' : 'database_unavailable',
+      database: dbState.ready ? 'connected' : dbState.error,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Until the database is connected, API calls get a clear message instead of hanging
+  app.use('/api', (_req, res, next) => {
+    if (dbState.ready) return next();
+    res.status(503).json({
+      error: `The server can't reach the database right now (${dbState.error}). It retries automatically every 30 seconds — check DATABASE_URL if this continues.`,
+    });
   });
 
   app.get('/api/auth/config', asyncHandler(async (_req, res) => {
