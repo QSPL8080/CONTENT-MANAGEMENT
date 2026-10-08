@@ -34,13 +34,19 @@ self.addEventListener('push', (event) => {
     data = { title: 'Quickupp ContentOps', body: event.data ? event.data.text() : '' };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Quickupp ContentOps', {
-      body: data.body || '',
-      icon: '/quickupp-q.png',
-      badge: '/quickupp-q.png',
-      tag: data.tag || undefined,
-      requireInteraction: data.persistent !== false,
-      data: { contentId: data.contentId || null },
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // ContentOps is open and in front → the page shows its own pop-up (bottom-right, inside
+      // the app), so skip the desktop one to avoid showing the same thing twice.
+      const inFront = clientList.some((c) => c.visibilityState === 'visible' && c.focused);
+      if (inFront) return;
+      return self.registration.showNotification(data.title || 'Quickupp ContentOps', {
+        body: data.body || '',
+        icon: '/quickupp-q.png',
+        badge: '/quickupp-q.png',
+        tag: data.tag || undefined,
+        requireInteraction: data.persistent !== false,
+        data: { contentId: data.contentId || null },
+      });
     })
   );
 });

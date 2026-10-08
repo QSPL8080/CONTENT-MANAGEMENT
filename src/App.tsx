@@ -30,7 +30,34 @@ import { PostingConfirmModal } from './components/PostingConfirmModal';
 import { ReportIssueModal } from './components/ReportIssueModal';
 import { RevisionModal } from './components/RevisionModal';
 import { MoveDateModal } from './components/MoveDateModal';
-import { TaskNotificationToast } from './components/TaskNotificationToast';
+import { TaskNotificationToast, ToastItem } from './components/TaskNotificationToast';
+
+/** True while ContentOps is the tab the person is looking at — then pop-ups appear inside the page. */
+function pageInFront(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus();
+}
+
+/** Colour/icon of the in-app pop-up for each kind of activity (Admin). */
+function activityToastType(action: string): ToastItem['type'] {
+  switch (action) {
+    case 'created_content':
+    case 'reassigned_creator':
+    case 'reassigned_poster':
+      return 'assigned';
+    case 'uploaded_final_video':
+    case 'replaced_final_video':
+      return 'ready_to_post';
+    case 'marked_posted':
+    case 'added_post_url':
+      return 'posted';
+    case 'revision_requested':
+      return 'revision';
+    case 'reported_issue':
+      return 'issue';
+    default:
+      return 'general';
+  }
+}
 import { 
   playNotificationSound, 
   sendDesktopNotification, 
@@ -52,7 +79,16 @@ export default function App() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [issues, setIssues] = useState<ContentIssue[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [activeToastNotification, setActiveToastNotification] = useState<AppNotification | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // Adds in-app pop-ups (bottom-right). Newest sits at the bottom; at most 4 on screen.
+  const showToasts = useCallback((items: ToastItem[]) => {
+    if (items.length === 0) return;
+    setToasts((prev) => {
+      const ids = new Set(items.map((i) => i.id));
+      return [...prev.filter((p) => !ids.has(p.id)), ...items].slice(-4);
+    });
+  }, []);
+  const closeToast = useCallback((id: string) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
   const [isLoading, setIsLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -250,7 +286,19 @@ export default function App() {
         const fromOthers = logs.filter((l) => l.user_id !== currentUser.id && l.action !== 'storage_cleanup');
         if (fromOthers.length === 0) return;
         playNotificationSound();
-        if (isPushActive()) { refreshData(); return; } // the server already sent these as pop-ups
+        // Page open and in front → pop-ups inside ContentOps (bottom-right)
+        if (pageInFront()) {
+          showToasts(fromOthers.slice(-4).map((l) => ({
+            id: `activity-${l.id}`,
+            title: ACTIVITY_TITLES[l.action] || 'New activity',
+            message: l.description,
+            type: activityToastType(l.action),
+            content_id: l.content_id || null,
+          })));
+          refreshData();
+          return;
+        }
+        if (isPushActive()) { refreshData(); return; } // the server already sent these as desktop pop-ups
         fromOthers.slice(-5).forEach((l) => {
           sendDesktopNotification(ACTIVITY_TITLES[l.action] || '🔔 New activity', {
             body: l.description,
@@ -299,7 +347,6 @@ export default function App() {
         );
 
         if (newUnseen.length > 0) {
-          const newest = newUnseen[0];
           newUnseen.forEach((n) => knownNotificationIdsRef.current.add(n.id));
 
           // 1. Synthesize audio chime
@@ -307,7 +354,8 @@ export default function App() {
 
           // 2. Desktop pop-up (bottom-right on Windows) for each new task notification — up to 3 at
           //    once. Admins get their pop-ups from the live activity feed instead (no duplicates).
-          if (currentUser.role !== 'admin' && !isPushActive()) {
+          const inFront = pageInFront();
+          if (!inFront && currentUser.role !== 'admin' && !isPushActive()) {
             newUnseen.slice(0, 3).forEach((n) => {
               sendDesktopNotification(n.title, {
                 body: n.message,
@@ -325,8 +373,11 @@ export default function App() {
             });
           }
 
-          // 3. Trigger in-app toast
-          setActiveToastNotification(newest);
+          // 3. In-app pop-ups (bottom-right) while ContentOps is in front — newest at the bottom.
+          //    Admins get theirs from the live activity feed instead (no duplicates).
+          if (inFront && currentUser.role !== 'admin') {
+            showToasts(newUnseen.slice(0, 3).reverse());
+          }
 
           // 4. Update notification state list
           setNotifications(latestNotifs);
@@ -389,14 +440,27 @@ export default function App() {
         const unread = (res.notifications || []).filter((n: AppNotification) => !n.read && n.user_id === user.id);
         if (unread.length > 0) {
           playNotificationSound();
-          unread.slice(0, 3).forEach((n: AppNotification) => {
-            sendDesktopNotification(n.title, { body: n.message, tag: n.id, contentId: n.content_id });
-          });
-          if (unread.length > 3) {
-            sendDesktopNotification(`🔔 ${unread.length - 3} more notifications`, {
-              body: 'Open the bell in ContentOps to see all of them.',
-              tag: `login-more-${Date.now()}`,
+          if (pageInFront()) {
+            const items: ToastItem[] = unread.slice(0, 3).reverse();
+            if (unread.length > 3) {
+              items.unshift({
+                id: `login-more-${Date.now()}`,
+                title: `${unread.length - 3} more notifications`,
+                message: 'Open the bell at the top to see all of them.',
+                type: 'general',
+              });
+            }
+            showToasts(items);
+          } else {
+            unread.slice(0, 3).forEach((n: AppNotification) => {
+              sendDesktopNotification(n.title, { body: n.message, tag: n.id, contentId: n.content_id });
             });
+            if (unread.length > 3) {
+              sendDesktopNotification(`🔔 ${unread.length - 3} more notifications`, {
+                body: 'Open the bell in ContentOps to see all of them.',
+                tag: `login-more-${Date.now()}`,
+              });
+            }
           }
         }
       } catch {
@@ -680,10 +744,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Real-Time Assignment Alert Toast */}
+      {/* In-app pop-ups, bottom-right */}
       <TaskNotificationToast
-        notification={activeToastNotification}
-        onClose={() => setActiveToastNotification(null)}
+        toasts={toasts}
+        onClose={closeToast}
         onOpenTask={(contentId) => {
           const item = contentList.find(c => c.id === contentId);
           if (item) setSelectedContent(item);

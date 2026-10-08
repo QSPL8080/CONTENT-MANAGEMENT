@@ -1,156 +1,173 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { AppNotification } from '../types';
-import { 
-  BellRing, 
-  X, 
-  ArrowRight, 
-  Film, 
-  Send, 
-  RotateCcw, 
-  AlertTriangle, 
-  Rocket, 
+import {
+  BellRing,
+  X,
+  ArrowRight,
+  RotateCcw,
+  AlertTriangle,
+  Rocket,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
 } from 'lucide-react';
 
+/**
+ * In-app pop-ups, shown bottom-right inside ContentOps while the page is open and in front.
+ * (When the page is in the background, the Windows/Chrome desktop pop-up is used instead.)
+ * Up to 4 stack on top of each other; each closes by itself after ~8 s — hovering pauses it.
+ */
+
+export interface ToastItem {
+  id: string;
+  title: string;
+  message: string;
+  type?: AppNotification['type'];
+  content_id?: string | null;
+  created_at?: string;
+}
+
 interface TaskNotificationToastProps {
-  notification: AppNotification | null;
-  onClose: () => void;
+  toasts: ToastItem[];
+  onClose: (id: string) => void;
   onOpenTask: (contentId: string) => void;
 }
 
-export const TaskNotificationToast: React.FC<TaskNotificationToastProps> = ({
-  notification,
-  onClose,
-  onOpenTask,
-}) => {
-  useEffect(() => {
-    if (!notification) return;
-    const timer = setTimeout(() => {
-      onClose();
-    }, 8000);
-    return () => clearTimeout(timer);
-  }, [notification, onClose]);
+const STYLES: Record<string, { label: string; accent: string; iconBox: string; bar: string; icon: React.ReactNode }> = {
+  assigned: {
+    label: 'New task',
+    accent: 'bg-blue-600',
+    iconBox: 'bg-blue-50 text-blue-600 ring-blue-100',
+    bar: 'bg-blue-500',
+    icon: <BellRing className="w-[18px] h-[18px]" />,
+  },
+  ready_to_post: {
+    label: 'Ready to post',
+    accent: 'bg-teal-500',
+    iconBox: 'bg-teal-50 text-teal-600 ring-teal-100',
+    bar: 'bg-teal-500',
+    icon: <CheckCircle2 className="w-[18px] h-[18px]" />,
+  },
+  posted: {
+    label: 'Posted',
+    accent: 'bg-emerald-500',
+    iconBox: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
+    bar: 'bg-emerald-500',
+    icon: <Rocket className="w-[18px] h-[18px]" />,
+  },
+  revision: {
+    label: 'Revision needed',
+    accent: 'bg-amber-500',
+    iconBox: 'bg-amber-50 text-amber-600 ring-amber-100',
+    bar: 'bg-amber-500',
+    icon: <RotateCcw className="w-[18px] h-[18px]" />,
+  },
+  issue: {
+    label: 'Issue reported',
+    accent: 'bg-rose-500',
+    iconBox: 'bg-rose-50 text-rose-600 ring-rose-100',
+    bar: 'bg-rose-500',
+    icon: <AlertTriangle className="w-[18px] h-[18px]" />,
+  },
+  overdue: {
+    label: 'Overdue',
+    accent: 'bg-rose-500',
+    iconBox: 'bg-rose-50 text-rose-600 ring-rose-100',
+    bar: 'bg-rose-500',
+    icon: <AlertTriangle className="w-[18px] h-[18px]" />,
+  },
+  general: {
+    label: 'Update',
+    accent: 'bg-indigo-500',
+    iconBox: 'bg-indigo-50 text-indigo-600 ring-indigo-100',
+    bar: 'bg-indigo-500',
+    icon: <Sparkles className="w-[18px] h-[18px]" />,
+  },
+};
 
-  if (!notification) return null;
+/** Removes a leading emoji / symbol from a title ("🆕 New task" → "New task"). */
+function cleanTitle(title: string): string {
+  return title.replace(/^[^\p{L}\p{N}"'“(]+/u, '').trim() || title;
+}
 
-  const type = notification.type;
-
-  const getStyleConfig = () => {
-    switch (type) {
-      case 'posted':
-        return {
-          badge: '🚀 Task Published',
-          badgeClass: 'text-emerald-300 bg-emerald-950/80 border-emerald-700',
-          iconBoxClass: 'bg-emerald-600/30 border-emerald-500/40 text-emerald-400',
-          icon: <Rocket className="w-5 h-5 animate-bounce" />,
-          dotClass: 'bg-emerald-400',
-        };
-      case 'ready_to_post':
-        return {
-          badge: '🎬 Task Completed',
-          badgeClass: 'text-teal-300 bg-teal-950/80 border-teal-700',
-          iconBoxClass: 'bg-teal-600/30 border-teal-500/40 text-teal-300',
-          icon: <CheckCircle2 className="w-5 h-5 text-teal-300 animate-pulse" />,
-          dotClass: 'bg-teal-400',
-        };
-      case 'revision':
-        return {
-          badge: '🔁 Review Flag: Revision Needed',
-          badgeClass: 'text-amber-300 bg-amber-950/80 border-amber-700',
-          iconBoxClass: 'bg-amber-600/30 border-amber-500/40 text-amber-300',
-          icon: <RotateCcw className="w-5 h-5 animate-spin" style={{ animationDuration: '3s' }} />,
-          dotClass: 'bg-amber-400',
-        };
-      case 'issue':
-      case 'overdue':
-        return {
-          badge: '⚠️ Review Flag: Issue Reported',
-          badgeClass: 'text-rose-300 bg-rose-950/80 border-rose-700',
-          iconBoxClass: 'bg-rose-600/30 border-rose-500/40 text-rose-300',
-          icon: <AlertTriangle className="w-5 h-5 animate-pulse" />,
-          dotClass: 'bg-rose-400',
-        };
-      case 'assigned':
-        return {
-          badge: '📋 Task Assigned',
-          badgeClass: 'text-blue-300 bg-blue-950/80 border-blue-700',
-          iconBoxClass: 'bg-blue-600/30 border-blue-500/40 text-blue-400',
-          icon: <BellRing className="w-5 h-5 animate-bounce" />,
-          dotClass: 'bg-blue-400',
-        };
-      default:
-        return {
-          badge: '✨ Workflow Update',
-          badgeClass: 'text-indigo-300 bg-indigo-950/80 border-indigo-700',
-          iconBoxClass: 'bg-indigo-600/30 border-indigo-500/40 text-indigo-300',
-          icon: <Sparkles className="w-5 h-5" />,
-          dotClass: 'bg-indigo-400',
-        };
-    }
-  };
-
-  const style = getStyleConfig();
+const ToastCard: React.FC<{
+  toast: ToastItem;
+  onClose: (id: string) => void;
+  onOpenTask: (contentId: string) => void;
+}> = ({ toast, onClose, onOpenTask }) => {
+  const style = STYLES[toast.type || 'general'] || STYLES.general;
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md w-[calc(100vw-2rem)] sm:w-96 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700/80 p-4 transition-all duration-300 animate-in slide-in-from-top-4 fade-in">
-      <div className="flex items-start gap-3">
-        <div className="relative shrink-0 mt-0.5">
-          <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${style.iconBoxClass}`}>
-            {style.icon}
-          </div>
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${style.dotClass}`}></span>
-            <span className={`relative inline-flex rounded-full h-3 w-3 ${style.dotClass}`}></span>
-          </span>
+    <div
+      role="status"
+      aria-live="polite"
+      className="toast-enter toast-card pointer-events-auto relative w-full overflow-hidden rounded-xl bg-white border border-slate-200 shadow-[0_12px_32px_-12px_rgba(15,23,42,0.35),0_2px_6px_-2px_rgba(15,23,42,0.08)]"
+    >
+      {/* coloured edge */}
+      <span className={`absolute inset-y-0 left-0 w-1 ${style.accent}`} />
+
+      <div className="pl-4 pr-3 pt-2.5 pb-3">
+        {/* app line — like a Chrome notification */}
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+          <img src="/quickupp-q.png" alt="" className="w-3.5 h-3.5 rounded-sm object-contain" />
+          <span className="font-semibold text-slate-600">Quickupp ContentOps</span>
+          <span className="text-slate-300">•</span>
+          <span>{style.label}</span>
+          <span className="text-slate-300">•</span>
+          <span>now</span>
+          <button
+            onClick={() => onClose(toast.id)}
+            className="ml-auto -mr-1 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            aria-label="Close notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${style.badgeClass}`}>
-              {style.badge}
-            </span>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
-              aria-label="Close notification"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        <div className="mt-1.5 flex items-start gap-3">
+          <div className={`shrink-0 w-9 h-9 rounded-lg ring-1 flex items-center justify-center ${style.iconBox}`}>
+            {style.icon}
           </div>
-
-          <h4 className="text-sm font-bold text-white leading-snug">
-            {notification.title}
-          </h4>
-
-          <p className="text-xs text-slate-300 mt-1 line-clamp-2 leading-relaxed">
-            {notification.message}
-          </p>
-
-          <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full inline-block ${style.dotClass}`} />
-              Audio chime &amp; screen pop-up sent
-            </span>
-
-            {notification.content_id && (
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-bold text-slate-900 leading-snug line-clamp-2 break-words">
+              {cleanTitle(toast.title)}
+            </p>
+            {toast.message && (
+              <p className="text-xs text-slate-600 mt-0.5 leading-relaxed line-clamp-2 break-words">
+                {toast.message}
+              </p>
+            )}
+            {toast.content_id && (
               <button
                 onClick={() => {
-                  if (notification.content_id) {
-                    onOpenTask(notification.content_id);
-                  }
-                  onClose();
+                  if (toast.content_id) onOpenTask(toast.content_id);
+                  onClose(toast.id);
                 }}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
               >
-                <span>View Task</span>
+                View task
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* time left — pauses while the mouse is over the pop-up */}
+      <span
+        className={`toast-timer absolute bottom-0 left-0 h-0.5 w-full origin-left opacity-60 ${style.bar}`}
+        onAnimationEnd={() => onClose(toast.id)}
+      />
     </div>
   );
 };
 
+export const TaskNotificationToast: React.FC<TaskNotificationToastProps> = ({ toasts, onClose, onOpenTask }) => {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="fixed z-[60] bottom-4 right-4 left-4 sm:left-auto sm:w-[380px] flex flex-col items-stretch gap-2.5 pointer-events-none">
+      {toasts.map((t) => (
+        <ToastCard key={t.id} toast={t} onClose={onClose} onOpenTask={onOpenTask} />
+      ))}
+    </div>
+  );
+};
