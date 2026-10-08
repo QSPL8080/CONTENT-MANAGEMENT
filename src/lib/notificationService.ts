@@ -175,6 +175,8 @@ export async function sendDesktopNotification(
     icon?: string;
     contentId?: string;
     onClick?: () => void;
+    /** true (default): stays on screen until clicked. false: disappears by itself after a few seconds. */
+    persistent?: boolean;
   }
 ): Promise<void> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -186,8 +188,9 @@ export async function sendDesktopNotification(
   }
 
   const tag = options?.tag || `notif-${Date.now()}`;
-  const icon = options?.icon || 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png';
-  const badge = 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png';
+  const icon = options?.icon || `${window.location.origin}/quickupp-q.png`;
+  const badge = `${window.location.origin}/quickupp-q.png`;
+  const persistent = options?.persistent !== false;
 
   // Primary: Service Worker showNotification (supports system level persistence & requireInteraction)
   try {
@@ -201,7 +204,7 @@ export async function sendDesktopNotification(
         tag,
         icon,
         badge,
-        requireInteraction: true, // Remains on screen on Windows/Mac until dismissed
+        requireInteraction: persistent, // true: stays on screen on Windows/Mac until dismissed
         data: {
           contentId: options?.contentId,
         },

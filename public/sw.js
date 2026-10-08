@@ -15,8 +15,8 @@ self.addEventListener('message', (event) => {
     const { title, options } = event.data;
     event.waitUntil(
       self.registration.showNotification(title, {
-        icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
-        badge: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
+        icon: '/quickupp-q.png',
+        badge: '/quickupp-q.png',
         requireInteraction: true, // keeps notification on screen until user interacts
         vibrate: [200, 100, 200],
         ...options,

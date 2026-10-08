@@ -208,6 +208,9 @@ export const api = {
     const query = contentId ? `?content_id=${contentId}` : '';
     return request<{ activity_logs: ActivityLog[] }>(`/api/activity${query}`);
   },
+  /** Activity newer than `since` (ISO time) — used for the Admin's live desktop pop-ups. */
+  getActivitySince: (since: string, limit = 30) =>
+    request<{ activity_logs: ActivityLog[] }>(`/api/activity?since=${encodeURIComponent(since)}&limit=${limit}`),
 
   // Notifications
   getNotifications: () =>

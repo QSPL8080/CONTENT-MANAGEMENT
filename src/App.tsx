@@ -205,6 +205,79 @@ export default function App() {
     };
   }, [currentUser, resetToSignedOut]);
 
+  // Admin: live desktop pop-up for every action anyone else takes (new task, status change,
+  // uploads, ready to post, revisions, issues, password changes, …). Shown only — not saved.
+  const lastActivityAtRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    lastActivityAtRef.current = new Date().toISOString();
+    const ACTIVITY_TITLES: Record<string, string> = {
+      created_content: '🆕 New task created',
+      reassigned_creator: '👤 Task assigned',
+      reassigned_poster: '👤 Intern assigned',
+      status_changed: '🔄 Status changed',
+      uploaded_final_video: '📤 Final file uploaded — ready to post',
+      replaced_final_video: '📤 Final file replaced',
+      revision_requested: '✏️ Revision requested',
+      reported_issue: '⚠️ Issue reported',
+      resolved_issue: '✅ Issue resolved',
+      marked_posted: '✅ Posted',
+      added_post_url: '🔗 Post link added',
+      date_changed: '📅 Rescheduled',
+      edited_content: '📝 Content edited',
+      deleted_content: '🗑️ Content deleted',
+      duplicated_content: '📄 Content duplicated',
+      downloaded_video: '⬇️ File downloaded',
+      editor_notes: '🗒️ Notes added',
+      password_changed: '🔑 Password changed',
+      password_viewed: '👁️ Password viewed',
+      user_added: '👥 Team member added',
+      user_updated: '👥 Team member updated',
+      user_deleted: '👥 Team member deleted',
+      settings_updated: '⚙️ Settings changed',
+    };
+    const timer = setInterval(async () => {
+      const since = lastActivityAtRef.current;
+      if (!since) return;
+      try {
+        const res = await api.getActivitySince(since, 30);
+        const logs = (res.activity_logs || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+        if (logs.length === 0) return;
+        lastActivityAtRef.current = logs[logs.length - 1].created_at;
+        const fromOthers = logs.filter((l) => l.user_id !== currentUser.id && l.action !== 'storage_cleanup');
+        if (fromOthers.length === 0) return;
+        playNotificationSound();
+        fromOthers.slice(-5).forEach((l) => {
+          sendDesktopNotification(ACTIVITY_TITLES[l.action] || '🔔 New activity', {
+            body: l.description,
+            tag: `activity-${l.id}`,
+            contentId: l.content_id || undefined,
+            persistent: false, // disappears by itself; many can arrive
+            onClick: () => {
+              if (l.content_id) {
+                api.getContent().then((r) => {
+                  const item = r.content.find((c: any) => c.id === l.content_id);
+                  if (item) setSelectedContent(item);
+                });
+              }
+            },
+          });
+        });
+        if (fromOthers.length > 5) {
+          sendDesktopNotification(`🔔 ${fromOthers.length - 5} more updates`, {
+            body: 'Open Activity to see everything.',
+            tag: `activity-more-${Date.now()}`,
+            persistent: false,
+          });
+        }
+        refreshData();
+      } catch {
+        // quiet fail on transient network poll
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [currentUser]);
+
   // Real-time Global Workflow Notification Listener:
   // Polls server every 3s. Whenever any task is published, completed, reviewed & flagged for revision,
   // an issue reported, or assigned, it triggers a screen pop-up, melodic chime, and visual toast for all persons.
@@ -228,20 +301,25 @@ export default function App() {
           // 1. Synthesize audio chime
           playNotificationSound();
 
-          // 2. Dispatch native desktop screen pop-up (appears even if minimized or on another tab/window)
-          sendDesktopNotification(newest.title, {
-            body: newest.message,
-            tag: newest.id,
-            contentId: newest.content_id,
-            onClick: () => {
-              if (newest.content_id) {
-                api.getContent().then((res) => {
-                  const item = res.content.find((c: any) => c.id === newest.content_id);
-                  if (item) setSelectedContent(item);
-                });
-              }
-            },
-          });
+          // 2. Desktop pop-up (bottom-right on Windows) for each new task notification — up to 3 at
+          //    once. Admins get their pop-ups from the live activity feed instead (no duplicates).
+          if (currentUser.role !== 'admin') {
+            newUnseen.slice(0, 3).forEach((n) => {
+              sendDesktopNotification(n.title, {
+                body: n.message,
+                tag: n.id,
+                contentId: n.content_id,
+                onClick: () => {
+                  if (n.content_id) {
+                    api.getContent().then((res) => {
+                      const item = res.content.find((c: any) => c.id === n.content_id);
+                      if (item) setSelectedContent(item);
+                    });
+                  }
+                },
+              });
+            });
+          }
 
           // 3. Trigger in-app toast
           setActiveToastNotification(newest);

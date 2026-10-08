@@ -901,7 +901,7 @@ async function startServer() {
   // Activity logs (scoped)
   // -------------------------------------------------------------------------
   app.get('/api/activity', asyncHandler(async (req, res) => {
-    const { content_id, limit } = req.query;
+    const { content_id, limit, since } = req.query;
     if (content_id) {
       const item = await db.getContentById(String(content_id));
       if (!item || !canViewContent(req.user, item)) return res.json({ activity_logs: [] });
@@ -910,7 +910,8 @@ async function startServer() {
       activity_logs: await db.getActivityLogs(
         content_id as string,
         limit ? parseInt(limit as string, 10) : 100,
-        req.user
+        req.user,
+        since ? String(since) : undefined
       ),
     });
   }));

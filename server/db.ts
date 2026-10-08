@@ -1239,11 +1239,15 @@ class RelationalDatabase {
     return rowToLog(rows[0]);
   }
 
-  async getActivityLogs(contentId?: string, limit = 50, visibleTo?: User): Promise<ActivityLog[]> {
+  async getActivityLogs(contentId?: string, limit = 50, visibleTo?: User, since?: string): Promise<ActivityLog[]> {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 500));
     const conditions: string[] = [];
     const vals: any[] = [];
     let i = 1;
+    if (since && !Number.isNaN(Date.parse(since))) {
+      conditions.push(`l.created_at > $${i++}`);
+      vals.push(new Date(since).toISOString());
+    }
     if (contentId) {
       conditions.push(`l.content_id = $${i++}`);
       vals.push(contentId);
