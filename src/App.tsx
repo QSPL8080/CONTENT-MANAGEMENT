@@ -409,9 +409,8 @@ export default function App() {
   // Content Operations Handlers
   const handleCreateContent = async (contentData: Partial<ContentItem>) => {
     if (!currentUser) return;
-    const res = await api.createContent(contentData);
+    await api.createContent(contentData);
     await refreshData();
-    return res.content;
   };
 
   const handleSaveContentEdits = async (contentData: Partial<ContentItem>) => {
@@ -805,7 +804,6 @@ export default function App() {
           defaultDate={createDefaultDate}
           defaultContentType={createDefaultContentType}
           onCreate={handleCreateContent}
-          currentUser={(currentUser && users.find(u => u.id === currentUser.id)) || currentUser || undefined}
         />
       )}
 
