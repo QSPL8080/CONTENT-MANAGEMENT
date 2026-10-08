@@ -83,6 +83,21 @@ TEAM_DEFAULT_PASSWORD=<your_team_default_password>
 
 > **Automated Database Setup:** On first start, the application automatically connects to PostgreSQL, creates the database if it does not exist, runs table migrations, and seeds initial users.
 
+#### Using Supabase (same database on your PC and on the server)
+1. Supabase → your project → **Connect** → **Session pooler** → copy the URI (works on IPv4 networks).
+2. Put your database password into it and set it in `.env` on **both** your PC and the server:
+   ```env
+   DATABASE_URL=postgresql://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+   DB_POOL_MAX=5
+   ```
+3. Start the app — tables and team accounts are created automatically in Supabase.
+
+Notes:
+* SSL is turned on automatically for any database that is not `localhost` (`DATABASE_SSL=true|false` overrides). For full certificate checking, download Supabase's SSL certificate (Database settings → SSL) and set `DATABASE_SSL_CA=./data/supabase-ca.crt`.
+* On hosted databases the app enables Row Level Security on its tables, so Supabase's public REST API cannot read them. The app itself is unaffected.
+* Use the **same `data/.vault-key`** file on every machine that uses the database, otherwise saved passwords can't be shown.
+* Uploaded files are stored in each machine's own `uploads/` folder, not in Supabase — files uploaded on the server won't open on your PC (and vice versa).
+
 ### 3. Run Development Server
 ```bash
 npm run dev

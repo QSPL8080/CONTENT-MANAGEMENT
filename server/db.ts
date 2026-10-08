@@ -15,6 +15,7 @@ import {
 import { isManagerial, roleLabel } from '../src/lib/roles';
 import { TEAM_ROSTER } from './team';
 import { encryptPassword, decryptPassword } from './vault';
+import { pgConnectionConfig, isLocalDatabase } from './pgConfig';
 
 dotenv.config();
 
@@ -31,7 +32,10 @@ pg.types.setTypeParser(1082, (v: string) => v);
 export const DATABASE_URL =
   process.env.DATABASE_URL || 'postgresql://postgres:8080@localhost:5432/content_management';
 
-export const pool = new Pool({ connectionString: DATABASE_URL });
+export const pool = new Pool({
+  ...pgConnectionConfig(DATABASE_URL),
+  max: Number(process.env.DB_POOL_MAX) || 10,
+});
 
 /**
  * Create the database itself (e.g. content_management) if it does not exist yet, by connecting
@@ -50,7 +54,7 @@ async function ensureDatabaseExists(): Promise<void> {
   }
   if (!dbName || dbName === 'postgres') return;
 
-  const admin = new pg.Client({ connectionString: adminUrl });
+  const admin = new pg.Client(pgConnectionConfig(adminUrl));
   try {
     await admin.connect();
     const { rows } = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName]);
@@ -1362,6 +1366,19 @@ class RelationalDatabase {
             console.warn(`⚠️  Skipped index (${err.message}): ${stmt.slice(0, 80)}`);
           } else {
             throw err;
+          }
+        }
+      }
+
+      // Hosted databases (e.g. Supabase) publish every table in the "public" schema through
+      // their REST API. Turn on Row Level Security with no policies so that API can't read or
+      // change anything; this app connects as the table owner, which RLS does not restrict.
+      if (!isLocalDatabase(DATABASE_URL)) {
+        for (const t of ['workspaces', 'users', 'content_items', 'activity_logs', 'issues', 'notifications', 'settings', 'sessions']) {
+          try {
+            await client.query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
+          } catch (err: any) {
+            console.warn(`⚠️  Could not enable row level security on ${t}: ${err.message}`);
           }
         }
       }

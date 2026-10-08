@@ -4,6 +4,7 @@
  */
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { pgConnectionConfig } from '../server/pgConfig';
 
 dotenv.config();
 
@@ -13,7 +14,7 @@ const DATABASE_URL =
 const TABLES = ['workspaces', 'users', 'content_items', 'activity_logs', 'issues', 'notifications', 'settings', 'sessions'];
 
 async function main() {
-  const client = new pg.Client({ connectionString: DATABASE_URL });
+  const client = new pg.Client(pgConnectionConfig(DATABASE_URL));
   await client.connect();
   const { rows: [db] } = await client.query('SELECT current_database() AS name');
   console.log(`\nDatabase: ${db.name}\n`);
