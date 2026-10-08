@@ -18,6 +18,7 @@ import { encryptPassword, decryptPassword, envVaultKey, setSharedVaultKey, newVa
 import { pgConnectionConfig, isLocalDatabase } from './pgConfig';
 import { copyFromPreviousDatabase, restoreAccountsBackup, saveAccountsBackup } from './carryOver';
 import { sendTaskEmail, emailConfigured } from './mailer';
+import { initPush, pushToUsers, ACTIVITY_TITLES } from './push';
 
 dotenv.config();
 
@@ -205,6 +206,16 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enc TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS credentials_version INT NOT NULL DEFAULT 0;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS vault_key TEXT;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS vapid_public TEXT;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS vapid_private TEXT;
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint    TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions (user_id);
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS retention_days INT NOT NULL DEFAULT 90;
 ALTER TABLE content_items ADD COLUMN IF NOT EXISTS editor_notes TEXT;
@@ -1237,7 +1248,20 @@ class RelationalDatabase {
         log.metadata ? JSON.stringify(log.metadata) : null, now,
       ]
     );
-    return rowToLog(rows[0]);
+    const saved = rowToLog(rows[0]);
+    // Admins: live desktop pop-up for every action by someone else (not stored as a notification)
+    if (saved.action !== 'storage_cleanup') {
+      pool.query(`SELECT id FROM users WHERE role = 'admin' AND status = 'active' AND id <> $1`, [saved.user_id])
+        .then(({ rows: admins }) => pushToUsers(pool, admins.map(a => a.id), {
+          title: ACTIVITY_TITLES[saved.action] || '🔔 New activity',
+          body: saved.description,
+          tag: `activity-${saved.id}`,
+          contentId: saved.content_id ?? null,
+          persistent: false,
+        }))
+        .catch(() => {});
+    }
+    return saved;
   }
 
   async getActivityLogs(contentId?: string, limit = 50, visibleTo?: User, since?: string): Promise<ActivityLog[]> {
@@ -1283,6 +1307,18 @@ class RelationalDatabase {
       [id, notif.user_id, notif.title, notif.message, notif.content_id ?? null, notif.type || 'general', now]
     );
     const created = rowToNotif(rows[0]);
+    // Desktop pop-up through the browser (works even when ContentOps isn't open).
+    // Admins get pop-ups from the activity feed instead (see logActivity).
+    pool.query('SELECT role FROM users WHERE id = $1', [created.user_id])
+      .then(({ rows: r }) => {
+        if (r[0] && r[0].role !== 'admin') {
+          pushToUsers(pool, [created.user_id], {
+            title: created.title, body: created.message, tag: created.id,
+            contentId: created.content_id ?? null, persistent: true,
+          });
+        }
+      })
+      .catch(() => {});
     // E-mail the person when this notification gives them work to do (runs in the background)
     if (TASK_EMAIL_TYPES.has(created.type || 'general') && emailConfigured()) {
       this.emailTaskNotification(created).catch(err =>
@@ -1518,12 +1554,13 @@ class RelationalDatabase {
       console.log(envVaultKey()
         ? '🔐 Password key: PASSWORD_VAULT_KEY (database key also accepted for reading)'
         : '🔐 Password key: stored in the database (same for every server and redeploy)');
+      await initPush(pool);
 
       // Hosted databases (e.g. Supabase) publish every table in the "public" schema through
       // their REST API. Turn on Row Level Security with no policies so that API can't read or
       // change anything; this app connects as the table owner, which RLS does not restrict.
       if (!isLocalDatabase(DATABASE_URL)) {
-        for (const t of ['workspaces', 'users', 'content_items', 'activity_logs', 'issues', 'notifications', 'settings', 'sessions']) {
+        for (const t of ['workspaces', 'users', 'content_items', 'activity_logs', 'issues', 'notifications', 'settings', 'sessions', 'push_subscriptions']) {
           try {
             await client.query(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`);
           } catch (err: any) {

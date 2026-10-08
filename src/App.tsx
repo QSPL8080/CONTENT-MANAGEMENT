@@ -36,6 +36,9 @@ import {
   sendDesktopNotification, 
   initAudioOnGesture,
   registerNotificationServiceWorker,
+  enablePushNotifications,
+  disablePushNotifications,
+  isPushActive,
   requestBrowserNotificationPermission
 } from './lib/notificationService';
 import { Loader2, ShieldAlert, BellRing } from 'lucide-react';
@@ -247,6 +250,7 @@ export default function App() {
         const fromOthers = logs.filter((l) => l.user_id !== currentUser.id && l.action !== 'storage_cleanup');
         if (fromOthers.length === 0) return;
         playNotificationSound();
+        if (isPushActive()) { refreshData(); return; } // the server already sent these as pop-ups
         fromOthers.slice(-5).forEach((l) => {
           sendDesktopNotification(ACTIVITY_TITLES[l.action] || '🔔 New activity', {
             body: l.description,
@@ -303,7 +307,7 @@ export default function App() {
 
           // 2. Desktop pop-up (bottom-right on Windows) for each new task notification — up to 3 at
           //    once. Admins get their pop-ups from the live activity feed instead (no duplicates).
-          if (currentUser.role !== 'admin') {
+          if (currentUser.role !== 'admin' && !isPushActive()) {
             newUnseen.slice(0, 3).forEach((n) => {
               sendDesktopNotification(n.title, {
                 body: n.message,
@@ -378,9 +382,48 @@ export default function App() {
     } catch (err) {
       console.error('Failed to load workspace after sign-in:', err);
     }
+    // Pop up whatever arrived while they were away (new tasks, ready to post, revisions, …)
+    if (user.role !== 'admin') {
+      try {
+        const res = await api.getNotifications();
+        const unread = (res.notifications || []).filter((n: AppNotification) => !n.read && n.user_id === user.id);
+        if (unread.length > 0) {
+          playNotificationSound();
+          unread.slice(0, 3).forEach((n: AppNotification) => {
+            sendDesktopNotification(n.title, { body: n.message, tag: n.id, contentId: n.content_id });
+          });
+          if (unread.length > 3) {
+            sendDesktopNotification(`🔔 ${unread.length - 3} more notifications`, {
+              body: 'Open the bell in ContentOps to see all of them.',
+              tag: `login-more-${Date.now()}`,
+            });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
   }, [loadWorkspaceData]);
 
+  // Register this browser for push pop-ups whenever someone is signed in and has allowed them
+  useEffect(() => {
+    if (currentUser) enablePushNotifications();
+  }, [currentUser]);
+
+  // Opened from a pop-up while the app was closed (…/?content_id=…): show that task
+  useEffect(() => {
+    if (!currentUser || typeof window === 'undefined') return;
+    const id = new URLSearchParams(window.location.search).get('content_id');
+    if (!id) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    api.getContent().then((res) => {
+      const item = res.content.find((c: any) => c.id === id);
+      if (item) setSelectedContent(item);
+    }).catch(() => {});
+  }, [currentUser]);
+
   const handleLogout = async () => {
+    await disablePushNotifications();
     try {
       await api.logout();
     } catch (err) {
@@ -601,6 +644,7 @@ export default function App() {
                 const res = await requestBrowserNotificationPermission();
                 playNotificationSound();
                 if (res === 'granted') {
+                  enablePushNotifications();
                   sendDesktopNotification('🚀 Screen Pop-up Alerts Enabled!', {
                     body: 'You will now receive desktop pop-ups with chime whenever tasks are published, completed, reviewed, or assigned.',
                   });

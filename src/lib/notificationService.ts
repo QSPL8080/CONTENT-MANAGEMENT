@@ -148,6 +148,89 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
  * to display on screen even when the page is inactive or tab is in background.
  */
 let swRegistration: ServiceWorkerRegistration | null = null;
+let pushActive = false;
+
+/** True when this browser receives server push pop-ups (so the page shouldn't show duplicates). */
+export function isPushActive(): boolean {
+  return pushActive;
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function bufferToBase64Url(buf: ArrayBuffer | null | undefined): string {
+  if (!buf) return '';
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  bytes.forEach(b => { s += String.fromCharCode(b); });
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Registers this browser for desktop pop-ups sent by the server — they appear bottom-right
+ * even when ContentOps isn't open (Chrome just needs to be running). Needs permission granted.
+ */
+export async function enablePushNotifications(): Promise<boolean> {
+  try {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+    if (!swRegistration) await registerNotificationServiceWorker();
+    const reg = await navigator.serviceWorker.ready;
+    const keyRes = await fetch('/api/push/key', { credentials: 'include' });
+    if (!keyRes.ok) return false;
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) return false;
+    let sub = await reg.pushManager.getSubscription();
+    // Server keys changed (e.g. new database) → the old registration no longer works
+    if (sub && bufferToBase64Url(sub.options?.applicationServerKey as ArrayBuffer) !== publicKey) {
+      await sub.unsubscribe().catch(() => {});
+      sub = null;
+    }
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+    const save = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON() }),
+    });
+    pushActive = save.ok;
+    return pushActive;
+  } catch (err) {
+    console.warn('Desktop push pop-ups could not be enabled:', err);
+    pushActive = false;
+    return false;
+  }
+}
+
+/** On sign-out: this browser stops receiving that person's pop-ups. */
+export async function disablePushNotifications(): Promise<void> {
+  try {
+    pushActive = false;
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (!sub) return;
+    await fetch('/api/push/unsubscribe', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    }).catch(() => {});
+    await sub.unsubscribe().catch(() => {});
+  } catch {
+    // ignore
+  }
+}
 
 export async function registerNotificationServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {

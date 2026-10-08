@@ -2,7 +2,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
-import { db, SessionInfo, nowInTimezone } from './server/db';
+import { db, pool, SessionInfo, nowInTimezone } from './server/db';
+import { pushPublicKey, saveSubscription, removeSubscription } from './server/push';
 import { SAMPLE_CALENDAR_ITEMS } from './server/sampleData';
 import {
   runStorageLifecycleCleanup,
@@ -304,6 +305,21 @@ async function startServer() {
 
   app.get('/api/auth/me', asyncHandler(async (req, res) => {
     res.json({ user: req.user });
+  }));
+
+  // Desktop push pop-ups: each browser registers itself for the signed-in person
+  app.get('/api/push/key', (_req, res) => {
+    res.json({ publicKey: pushPublicKey() });
+  });
+  app.post('/api/push/subscribe', asyncHandler(async (req, res) => {
+    const ok = await saveSubscription(pool, req.user.id, req.body?.subscription);
+    if (!ok) return res.status(400).json({ error: 'Invalid push subscription' });
+    res.json({ success: true });
+  }));
+  app.post('/api/push/unsubscribe', asyncHandler(async (req, res) => {
+    const endpoint = String(req.body?.endpoint || '');
+    if (endpoint) await removeSubscription(pool, endpoint);
+    res.json({ success: true });
   }));
 
   // -------------------------------------------------------------------------

@@ -25,6 +25,26 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Pop-ups sent by the server (Web Push) — shown even when ContentOps isn't open
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'Quickupp ContentOps', body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Quickupp ContentOps', {
+      body: data.body || '',
+      icon: '/quickupp-q.png',
+      badge: '/quickupp-q.png',
+      tag: data.tag || undefined,
+      requireInteraction: data.persistent !== false,
+      data: { contentId: data.contentId || null },
+    })
+  );
+});
+
 // Handle clicking on desktop pop-up notification:
 // Focuses open ContentFlow window or opens the app and selects the task
 self.addEventListener('notificationclick', (event) => {
