@@ -340,6 +340,29 @@ async function startServer() {
     res.json({ password });
   }));
 
+  // Admin: permanently delete a team member
+  app.delete('/api/users/:id', asyncHandler(async (req, res) => {
+    const actor = req.user;
+    if (!canManageTeam(actor.role)) {
+      return res.status(403).json({ error: 'Only Admins can delete team members.' });
+    }
+    const target = await db.getUserById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.id === actor.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+    if (target.role === 'admin' && (await db.countActiveAdmins(target.id)) === 0) {
+      return res.status(400).json({ error: 'There must always be at least one active Admin.' });
+    }
+    await db.deleteUser(target.id);
+    await db.logActivity({
+      user_id: actor.id, user_name: actor.name, user_role: actor.role,
+      action: 'user_deleted',
+      description: `${actor.name} deleted the account of ${target.name} (${roleLabel(target.role)}, ${target.email}).`,
+    });
+    res.json({ success: true });
+  }));
+
   app.patch('/api/users/:id', asyncHandler(async (req, res) => {
     const actor = req.user;
     if (!canManageTeam(actor.role)) {

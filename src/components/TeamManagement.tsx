@@ -13,7 +13,7 @@ import {
   isCreator,
   isPoster,
 } from '../lib/roles';
-import { UserPlus, X, Pencil, Search, KeyRound, Ban, CheckCircle2, UserCog, Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { UserPlus, X, Pencil, Search, KeyRound, Ban, CheckCircle2, UserCog, Eye, EyeOff, Copy, Check, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface TeamManagementProps {
@@ -22,6 +22,7 @@ interface TeamManagementProps {
   currentUser: User;
   onAddUser: (user: Partial<User> & { password?: string }) => Promise<void>;
   onUpdateUser: (userId: string, data: Partial<User> & { password?: string }) => Promise<void>;
+  onDeleteUser?: (userId: string) => Promise<void>;
 }
 
 type FormState = {
@@ -40,6 +41,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   currentUser,
   onAddUser,
   onUpdateUser,
+  onDeleteUser,
 }) => {
   // Admin: full team and user management
   const canEdit = canManageTeam(currentUser.role);
@@ -157,6 +159,26 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       await onUpdateUser(u.id, { status: next });
     } catch (err: any) {
       alert(err.message || 'Could not update status');
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const removeUser = async (u: User) => {
+    if (!onDeleteUser) return;
+    const assigned = contentList.filter(c => c.editor_id === u.id || c.poster_id === u.id).length;
+    const msg =
+      `Delete ${u.name} (${u.email}) permanently?\n\n` +
+      `• They can no longer sign in, and this cannot be undone.\n` +
+      (assigned ? `• ${assigned} content item${assigned !== 1 ? 's' : ''} assigned to them will become "Unassigned".\n` : '') +
+      `• Their activity history is kept.\n\n` +
+      `Tip: use Deactivate instead if they may come back.`;
+    if (!window.confirm(msg)) return;
+    setBusyUserId(u.id);
+    try {
+      await onDeleteUser(u.id);
+    } catch (err: any) {
+      alert(err.message || 'Could not delete user');
     } finally {
       setBusyUserId(null);
     }
@@ -366,6 +388,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 aria-label={disabled ? `Activate ${u.name}` : `Deactivate ${u.name}`}
                               >
                                 {disabled ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                            {isAdmin && onDeleteUser && u.id !== currentUser.id && (
+                              <button
+                                onClick={() => removeUser(u)}
+                                disabled={busyUserId === u.id}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                                title="Delete user"
+                                aria-label={`Delete ${u.name}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>

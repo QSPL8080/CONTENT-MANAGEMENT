@@ -441,6 +441,28 @@ class RelationalDatabase {
     return rows[0].n;
   }
 
+  /**
+   * Permanently removes an account. Their content stays (designer/intern fields become
+   * "Unassigned"), the activity history keeps their name, and they are signed out everywhere.
+   */
+  async deleteUser(id: string): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM notifications WHERE user_id = $1', [id]);
+      await client.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+      const { rowCount } = await client.query('DELETE FROM users WHERE id = $1', [id]);
+      await client.query('COMMIT');
+      if (rowCount) await saveAccountsBackup(pool);
+      return (rowCount ?? 0) > 0;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async createUser(user: { name: string; email: string; role: UserRole; avatar?: string; status?: string; password?: string; must_change_password?: boolean }): Promise<User> {
     const id = newId('user');
     const now = new Date().toISOString();

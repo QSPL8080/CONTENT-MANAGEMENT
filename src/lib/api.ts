@@ -86,6 +86,7 @@ export const api = {
       body: JSON.stringify(userData),
     }),
   revealPassword: (id: string) => request<{ password: string }>(`/api/users/${id}/password`),
+  deleteUser: (id: string) => request<{ success: boolean }>(`/api/users/${id}`, { method: 'DELETE' }),
   updateUser: (id: string, updates: Partial<User> & { password?: string }) =>
     request<{ user: User }>(`/api/users/${id}`, {
       method: 'PATCH',

@@ -422,6 +422,11 @@ export default function App() {
     setUsers(updated.users);
   };
 
+  const handleDeleteUser = async (userId: string) => {
+    await api.deleteUser(userId);
+    await refreshData(); // their content becomes unassigned
+  };
+
   const handleUpdateUser = async (userId: string, data: Partial<User>) => {
     await api.updateUser(userId, data);
     const updated = await api.getUsers();
@@ -682,6 +687,7 @@ export default function App() {
               currentUser={currentUser}
               onAddUser={handleAddUser}
               onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
             />
           )}
 
