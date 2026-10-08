@@ -333,7 +333,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                             {revealed[u.id] !== undefined ? (
                               <code className="font-mono text-slate-900 truncate select-all">{revealed[u.id]}</code>
                             ) : revealError[u.id] ? (
-                              <span className="text-rose-600 truncate" title={revealError[u.id]}>{revealError[u.id]}</span>
+                              <span className="flex items-center gap-1.5 min-w-0" title={revealError[u.id]}>
+                                <span className="text-amber-700 truncate">Old password can't be shown</span>
+                                <button
+                                  onClick={() => openEdit(u)}
+                                  className="shrink-0 font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                                >
+                                  Set new
+                                </button>
+                              </span>
                             ) : (
                               <span className="text-slate-400 tracking-widest">••••••••</span>
                             )}
