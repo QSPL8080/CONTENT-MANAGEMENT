@@ -587,8 +587,23 @@ class RelationalDatabase {
 
   /** Admin only (checked in the route): the user's current password, if it can be shown. */
   async revealPassword(userId: string): Promise<string | null> {
-    const { rows } = await pool.query('SELECT password_enc FROM users WHERE id = $1', [userId]);
-    return decryptPassword(rows[0]?.password_enc);
+    const { rows } = await pool.query('SELECT password_hash, password_enc FROM users WHERE id = $1', [userId]);
+    const row = rows[0];
+    if (!row) return null;
+    const shown = decryptPassword(row.password_enc);
+    if (shown !== null) return shown;
+    // The saved copy can't be opened (missing, or saved with a key this server doesn't have).
+    // If the person still uses the default team password, we can tell from the sign-in hash —
+    // show it and save a fresh copy so it works from now on.
+    const candidates = [...new Set([process.env.TEAM_DEFAULT_PASSWORD, 'Quickupp@123'].filter(Boolean) as string[])];
+    for (const candidate of candidates) {
+      if (row.password_hash && (await bcrypt.compare(candidate, row.password_hash))) {
+        await pool.query('UPDATE users SET password_enc = $1 WHERE id = $2', [encryptPassword(candidate), userId]);
+        await saveAccountsBackup(pool);
+        return candidate;
+      }
+    }
+    return null;
   }
 
   async setMustChangePassword(userId: string, value: boolean): Promise<void> {
