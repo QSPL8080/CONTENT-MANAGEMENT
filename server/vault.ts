@@ -10,6 +10,10 @@ import { DATA_DIR } from './paths';
  * Key: PASSWORD_VAULT_KEY in .env (64 hex chars), otherwise a random key generated once and
  * saved to data/.vault-key. Keep that file — without it, stored passwords can't be revealed
  * (sign-in keeps working; Admins can just set new passwords).
+ *
+ * PASSWORD_VAULT_OLD_KEYS (optional, comma-separated): keys used earlier, e.g. the
+ * data/.vault-key from your PC after moving the data to a server. Passwords saved with
+ * any of them can still be shown.
  */
 const KEY_FILE = path.join(DATA_DIR, '.vault-key');
 let cachedKey: Buffer | null = null;
@@ -45,14 +49,31 @@ export function encryptPassword(plain: string): string {
   return `v1:${iv.toString('base64')}:${tag.toString('base64')}:${ct.toString('base64')}`;
 }
 
+/** Every key that may have been used to save a password: current first, then older ones. */
+function allKeys(): Buffer[] {
+  const keys: Buffer[] = [getKey()];
+  const add = (hex: string) => {
+    const h = hex.trim();
+    if (/^[0-9a-f]{64}$/i.test(h) && !keys.some(k => k.toString('hex') === h.toLowerCase())) {
+      keys.push(Buffer.from(h, 'hex'));
+    }
+  };
+  (process.env.PASSWORD_VAULT_OLD_KEYS || '').split(/[\s,;]+/).forEach(add);
+  try { add(fs.readFileSync(KEY_FILE, 'utf8')); } catch { /* no key file */ }
+  return keys;
+}
+
 export function decryptPassword(stored: string | null | undefined): string | null {
   if (!stored || !stored.startsWith('v1:')) return null;
-  try {
-    const [, ivB64, tagB64, ctB64] = stored.split(':');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), Buffer.from(ivB64, 'base64'));
-    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]).toString('utf8');
-  } catch {
-    return null; // key changed or data damaged
+  const [, ivB64, tagB64, ctB64] = stored.split(':');
+  for (const key of allKeys()) {
+    try {
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'));
+      decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+      return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]).toString('utf8');
+    } catch {
+      // not this key — try the next one
+    }
   }
+  return null; // saved with a key we don't have
 }
