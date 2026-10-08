@@ -216,8 +216,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
             className="mt-0.5 w-4 h-4 accent-slate-900"
           />
           <span>
-            <span className="font-semibold block flex items-center gap-1.5"><Bell className="w-3.5 h-3.5" /> Notification preference</span>
-            <span className="text-xs text-slate-500">In-app notifications are always on. This saves the team's email-alert preference for when email delivery is connected.</span>
+            <span className="font-semibold block flex items-center gap-1.5"><Bell className="w-3.5 h-3.5" /> Email team members about their tasks</span>
+            <span className="text-xs text-slate-500">Sends an email when someone is assigned a task, asked for a revision, or a file is ready for them to post. In-app notifications are always on. Needs the email (SMTP) settings in the server's .env.</span>
           </span>
         </label>
       </section>

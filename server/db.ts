@@ -17,10 +17,14 @@ import { TEAM_ROSTER } from './team';
 import { encryptPassword, decryptPassword } from './vault';
 import { pgConnectionConfig, isLocalDatabase } from './pgConfig';
 import { copyFromPreviousDatabase, restoreAccountsBackup, saveAccountsBackup } from './carryOver';
+import { sendTaskEmail, emailConfigured } from './mailer';
 
 dotenv.config();
 
 const { Pool } = pg;
+
+// Notification types that mean "you have work to do" — these are also sent by e-mail.
+const TASK_EMAIL_TYPES = new Set(['assigned', 'revision', 'ready_to_post']);
 
 // Return DATE columns as plain 'YYYY-MM-DD' strings. Without this, pg turns them into
 // JS Dates at local midnight, and on an IST (UTC+5:30) server toISOString() shifts every
@@ -1225,7 +1229,38 @@ class RelationalDatabase {
        VALUES ($1,$2,$3,$4,$5,FALSE,$6,$7) RETURNING *`,
       [id, notif.user_id, notif.title, notif.message, notif.content_id ?? null, notif.type || 'general', now]
     );
-    return rowToNotif(rows[0]);
+    const created = rowToNotif(rows[0]);
+    // E-mail the person when this notification gives them work to do (runs in the background)
+    if (TASK_EMAIL_TYPES.has(created.type || 'general') && emailConfigured()) {
+      this.emailTaskNotification(created).catch(err =>
+        console.warn(`⚠️  Task e-mail skipped: ${err.message}`)
+      );
+    }
+    return created;
+  }
+
+  /** Sends the task e-mail for a notification: new task, revision, or a file ready for them to post. */
+  private async emailTaskNotification(n: AppNotification): Promise<void> {
+    const { rows: s } = await pool.query('SELECT notification_email FROM settings ORDER BY id LIMIT 1');
+    if (s[0] && s[0].notification_email === false) return; // switched off in Settings
+    const user = await this.getUserById(n.user_id);
+    if (!user || user.status !== 'active' || !user.email) return;
+    const item = n.content_id ? await this.getContentById(n.content_id) : undefined;
+    // "Ready to post" is a task only for the intern who will publish it
+    if (n.type === 'ready_to_post' && item?.poster_id !== user.id) return;
+
+    const time = (t?: string) => (t || '').slice(0, 5);
+    const cap = (v?: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : '');
+    const details: [string, string][] = item
+      ? [
+          ['Content', item.title],
+          ['Type', cap(item.content_type)],
+          ['Platform', cap(item.platform)],
+          ['Scheduled', `${item.scheduled_date} at ${time(item.scheduled_time)}`],
+          ['Instructions', item.instructions || ''],
+        ]
+      : [];
+    sendTaskEmail({ to: user.email, toName: user.name, subject: n.title, message: n.message, details });
   }
 
   async getNotifications(userId: string): Promise<AppNotification[]> {

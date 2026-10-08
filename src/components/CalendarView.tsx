@@ -43,7 +43,7 @@ interface CalendarViewProps {
 }
 
 type TabMode = 'overview' | 'category' | 'tags' | 'archive' | 'backend';
-type ViewDensity = 'month' | 'week' | 'day' | 'list';
+type ViewDensity = 'year' | 'month' | 'week' | 'day' | 'list';
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -167,7 +167,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   // Prev / next for the active view (month, week or day)
   const handlePrev = () => {
-    if (viewDensity === 'week' || viewDensity === 'day') {
+    if (viewDensity === 'year') {
+      setYear(year - 1);
+    } else if (viewDensity === 'week' || viewDensity === 'day') {
       const next = addDays(focusDate, viewDensity === 'week' ? -7 : -1);
       setFocusDate(next);
       syncMonthTo(next);
@@ -177,7 +179,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const handleNext = () => {
-    if (viewDensity === 'week' || viewDensity === 'day') {
+    if (viewDensity === 'year') {
+      setYear(year + 1);
+    } else if (viewDensity === 'week' || viewDensity === 'day') {
       const next = addDays(focusDate, viewDensity === 'week' ? 7 : 1);
       setFocusDate(next);
       syncMonthTo(next);
@@ -187,7 +191,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const switchView = (v: ViewDensity) => {
-    if ((v === 'week' || v === 'day') && (viewDensity === 'month' || viewDensity === 'list')) {
+    if ((v === 'week' || v === 'day') && (viewDensity === 'month' || viewDensity === 'list' || viewDensity === 'year')) {
       // Keep the focus inside the month being looked at
       const f = parseLocalDate(focusDate);
       if (f.getFullYear() !== year || f.getMonth() !== month) {
@@ -202,6 +206,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
   const headerTitle = (() => {
+    if (viewDensity === 'year') return `${year}`;
     if (viewDensity === 'day') {
       return parseLocalDate(focusDate).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     }
@@ -427,6 +432,41 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const getContentForDate = (dateStr: string) => {
     return filteredContent.filter(c => c.scheduled_date === dateStr);
   };
+
+  // Year view: content grouped by date, and the 12 month grids
+  const contentByDate = useMemo(() => {
+    const map = new Map<string, ContentItem[]>();
+    for (const c of filteredContent) {
+      const list = map.get(c.scheduled_date);
+      if (list) list.push(c); else map.set(c.scheduled_date, [c]);
+    }
+    return map;
+  }, [filteredContent]);
+
+  const yearMonths = useMemo(() => Array.from({ length: 12 }, (_, m) => {
+    const first = new Date(year, m, 1).getDay();
+    const days = new Date(year, m + 1, 0).getDate();
+    const cells: (string | null)[] = Array.from({ length: first }, () => null);
+    for (let d = 1; d <= days; d++) {
+      cells.push(`${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    const prefix = `${year}-${String(m + 1).padStart(2, '0')}`;
+    const total = filteredContent.filter(c => c.scheduled_date.startsWith(prefix)).length;
+    return { m, cells, total };
+  }), [year, filteredContent]);
+
+  const yearTotal = yearMonths.reduce((n, x) => n + x.total, 0);
+
+  // Years offered in the jump-to selector: a few around today, plus any year that has content
+  const yearOptions = useMemo(() => {
+    const set = new Set<number>();
+    const now = todayObj.getFullYear();
+    for (let y = now - 3; y <= now + 5; y++) set.add(y);
+    set.add(year);
+    contentList.forEach(c => { const y = Number(c.scheduled_date.slice(0, 4)); if (y) set.add(y); });
+    return [...set].sort((a, b) => a - b);
+  }, [contentList, year]);
 
   const handleDragStart = (contentId: string) => {
     if (!canManage) return;
@@ -802,7 +842,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             {/* Right Controls: Density, Sort, Search */}
             <div className="flex items-center gap-1.5 ml-auto">
               <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5" role="tablist" aria-label="Calendar view">
-                {(['month', 'week', 'day', 'list'] as ViewDensity[]).map(v => (
+                {(['year', 'month', 'week', 'day', 'list'] as ViewDensity[]).map(v => (
                   <button
                     key={v}
                     role="tab"
@@ -913,11 +953,36 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
           {/* Month Header & Controls (Matching Screenshot) */}
           <div className="flex items-center justify-between pt-2 pb-1">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-              {headerTitle}
-            </h2>
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                {headerTitle}
+              </h2>
+              {viewDensity === 'year' && (
+                <span className="text-xs font-medium text-slate-500">{yearTotal} item{yearTotal !== 1 ? 's' : ''}</span>
+              )}
+            </div>
 
             <div className="flex items-center gap-1">
+              {(viewDensity === 'month' || viewDensity === 'list') && (
+                <select
+                  value={month}
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                  aria-label="Jump to month"
+                  className="hidden sm:block mr-1 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-slate-400"
+                >
+                  {monthNames.map((n, i) => <option key={n} value={i}>{n}</option>)}
+                </select>
+              )}
+              {(viewDensity === 'month' || viewDensity === 'list' || viewDensity === 'year') && (
+                <select
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                  aria-label="Jump to year"
+                  className="mr-1 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-slate-400"
+                >
+                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              )}
               <button
                 onClick={handlePrev}
                 className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
@@ -942,6 +1007,64 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </button>
             </div>
           </div>
+
+          {/* YEAR VIEW — all 12 months at a glance */}
+          {viewDensity === 'year' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4">
+              {yearMonths.map(({ m, cells, total }) => {
+                const isCurrentMonth = year === todayObj.getFullYear() && m === todayObj.getMonth();
+                return (
+                  <div
+                    key={m}
+                    className={`bg-white rounded-2xl border shadow-2xs p-3 sm:p-4 ${isCurrentMonth ? 'border-slate-900' : 'border-slate-200'}`}
+                  >
+                    <button
+                      onClick={() => { setMonth(m); setViewDensity('month'); }}
+                      className="w-full flex items-center justify-between mb-2 group"
+                      title={`Open ${monthNames[m]} ${year}`}
+                    >
+                      <span className="text-sm font-bold text-slate-900 group-hover:underline">{monthNames[m]}</span>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${total ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        {total} item{total !== 1 ? 's' : ''}
+                      </span>
+                    </button>
+                    <div className="grid grid-cols-7 text-center text-[10px] font-medium text-slate-400 mb-1">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5">
+                      {cells.map((dateStr, i) => {
+                        if (!dateStr) return <div key={i} className="h-9" />;
+                        const items = contentByDate.get(dateStr) || [];
+                        const isToday = dateStr === todayStr;
+                        const types = [...new Set(items.map(c => c.content_type))].slice(0, 3);
+                        return (
+                          <button
+                            key={dateStr}
+                            onClick={() => { setFocusDate(dateStr); syncMonthTo(dateStr); setViewDensity(items.length ? 'day' : 'month'); }}
+                            title={items.length ? `${items.length} item${items.length !== 1 ? 's' : ''}: ${items.map(c => c.title).join(', ')}` : parseLocalDate(dateStr).toDateString()}
+                            className={`h-9 rounded-md flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
+                              items.length ? 'bg-slate-50 hover:bg-slate-100 font-bold text-slate-900' : 'text-slate-500 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className={isToday ? 'w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center' : ''}>
+                              {Number(dateStr.slice(8))}
+                            </span>
+                            {types.length > 0 && (
+                              <span className="flex gap-0.5">
+                                {types.map(t => (
+                                  <span key={t} className={`w-1.5 h-1.5 rounded-full ${indicators.find(x => x.type === t)?.dotColor || 'bg-slate-400'}`} />
+                                ))}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* 3. CALENDAR GRID VIEW */}
           {viewDensity === 'month' && (
