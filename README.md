@@ -98,6 +98,14 @@ Notes:
 * Use the **same `data/.vault-key`** file on every machine that uses the database, otherwise saved passwords can't be shown.
 * Uploaded files are stored in each machine's own `uploads/` folder, not in Supabase — files uploaded on the server won't open on your PC (and vice versa).
 
+#### Moving to a new database — nothing is lost
+When the app starts on a **new, empty** database it never falls back to old/default passwords if it can avoid it:
+1. If `.env` has `PREVIOUS_DATABASE_URL` (the database you used before), **everything** is copied from it on first start — accounts with their current passwords, content, activity, issues, notifications, settings.
+2. Otherwise, accounts are restored from `data/accounts-backup.json`, which the app rewrites every time an account is added or changed (password, name, role, Active/Deactivated).
+3. Only if neither exists are the default team accounts created with `TEAM_DEFAULT_PASSWORD`.
+
+Keep `data/accounts-backup.json` private (it is git-ignored). Use the same `data/.vault-key` everywhere so Admins can still view passwords.
+
 ### 3. Run Development Server
 ```bash
 npm run dev

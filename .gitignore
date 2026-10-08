@@ -9,3 +9,6 @@ coverage/
 # Password vault key (keep a private backup of this file)
 data/.vault-key
 uploads/
+# Accounts backup (contains password hashes) — written automatically, keep private
+data/accounts-backup.json
+data/accounts-backup.json.tmp

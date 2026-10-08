@@ -16,6 +16,7 @@ import { isManagerial, roleLabel } from '../src/lib/roles';
 import { TEAM_ROSTER } from './team';
 import { encryptPassword, decryptPassword } from './vault';
 import { pgConnectionConfig, isLocalDatabase } from './pgConfig';
+import { copyFromPreviousDatabase, restoreAccountsBackup, saveAccountsBackup } from './carryOver';
 
 dotenv.config();
 
@@ -446,6 +447,7 @@ class RelationalDatabase {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [id, user.name.trim(), user.email.trim().toLowerCase(), passwordHash, passwordEnc, user.avatar || '', user.role, user.status || 'active', Boolean(user.must_change_password), now, now]
     );
+    await saveAccountsBackup(pool);
     return rowToUser(rows[0]);
   }
 
@@ -486,6 +488,7 @@ class RelationalDatabase {
       `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
       vals
     );
+    await saveAccountsBackup(pool);
     return rows[0] ? rowToUser(rows[0]) : null;
   }
 
@@ -1398,12 +1401,42 @@ class RelationalDatabase {
       // Purge any invalid/non-standard roles
       await client.query(`DELETE FROM users WHERE role NOT IN ('admin','manager','graphic_designer','editor','poster')`);
 
-      // 1) Brand-new database only: create the team list with the default team password.
+      // 1) Brand-new (empty) database: bring the latest data over instead of starting from
+      //    defaults — first from PREVIOUS_DATABASE_URL (everything), otherwise from
+      //    data/accounts-backup.json (accounts with their current passwords). Only when neither
+      //    exists is the team list created with the default team password.
       //    Once any account exists, startup NEVER touches accounts again — passwords people
-      //    changed, members the Admin edited, deactivated or removed all stay exactly as they are,
-      //    on this PC, on the server, or after copying the data to another database.
+      //    changed, members the Admin edited, deactivated or removed all stay exactly as they are.
       const { rows: [{ n: userCount }] } = await client.query('SELECT COUNT(*)::int AS n FROM users');
+      let carriedOver = false;
       if (userCount === 0) {
+        const previousUrl = (process.env.PREVIOUS_DATABASE_URL || '').trim();
+        if (previousUrl && previousUrl !== DATABASE_URL) {
+          let copied: Record<string, number> | null;
+          try {
+            copied = await copyFromPreviousDatabase(client, previousUrl);
+          } catch (err: any) {
+            throw new Error(
+              `Could not copy data from PREVIOUS_DATABASE_URL (${err.message}). ` +
+              'Fix that link or remove it from .env, then start again. Nothing was changed and no default passwords were set.'
+            );
+          }
+          if (copied) {
+            carriedOver = true;
+            console.log(`✅ Copied everything from the previous database — ${Object.entries(copied).map(([t, n]) => `${t}: ${n}`).join(', ')}`);
+          } else {
+            console.warn('⚠️  PREVIOUS_DATABASE_URL has no accounts — nothing copied from it.');
+          }
+        }
+        if (!carriedOver) {
+          const restored = await restoreAccountsBackup(client);
+          if (restored > 0) {
+            carriedOver = true;
+            console.log(`✅ Restored ${restored} account(s) with their current passwords from data/accounts-backup.json`);
+          }
+        }
+      }
+      if (userCount === 0 && !carriedOver) {
         for (const member of TEAM_ROSTER) {
           const id = newId('user');
           await client.query(
@@ -1427,6 +1460,7 @@ class RelationalDatabase {
       console.log(`🔐 Admin sign-in accounts configured`);
 
       await client.query('DELETE FROM sessions WHERE expires_at < NOW()');
+      await saveAccountsBackup(client);
     } finally {
       client.release();
     }
