@@ -98,7 +98,7 @@ export function renderTaskEmail(mail: TaskEmail, logoSrc: string | null): { html
     .join('');
 
   const logo = logoSrc
-    ? `<img src="${esc(logoSrc)}" width="180" alt="${BRAND}" style="display:block;width:180px;max-width:180px;height:auto;border:0;outline:none;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;color:#0f172a">`
+    ? `<img src="${esc(logoSrc)}" width="200" alt="${BRAND}" style="display:block;width:200px;max-width:200px;height:auto;border:0;outline:none;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;color:#0f172a">`
     : `<span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;color:#0f172a">${BRAND}</span>`;
 
   const html = `<!DOCTYPE html>
