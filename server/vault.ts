@@ -17,14 +17,28 @@ import { DATA_DIR } from './paths';
  */
 const KEY_FILE = path.join(DATA_DIR, '.vault-key');
 let cachedKey: Buffer | null = null;
+/** Key shared through the database — the same for every server process and every redeploy. */
+let sharedKey: Buffer | null = null;
+
+export function envVaultKey(): string | null {
+  const fromEnv = (process.env.PASSWORD_VAULT_KEY || '').trim();
+  return /^[0-9a-f]{64}$/i.test(fromEnv) ? fromEnv.toLowerCase() : null;
+}
+
+/** Called once the database is connected (see db.init). */
+export function setSharedVaultKey(hex: string): void {
+  if (/^[0-9a-f]{64}$/i.test(hex)) sharedKey = Buffer.from(hex, 'hex');
+}
+
+export function newVaultKeyHex(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 function getKey(): Buffer {
+  const fromEnv = envVaultKey();
+  if (fromEnv) return Buffer.from(fromEnv, 'hex');
+  if (sharedKey) return sharedKey;
   if (cachedKey) return cachedKey;
-  const fromEnv = (process.env.PASSWORD_VAULT_KEY || '').trim();
-  if (/^[0-9a-f]{64}$/i.test(fromEnv)) {
-    cachedKey = Buffer.from(fromEnv, 'hex');
-    return cachedKey;
-  }
   try {
     const fromFile = fs.readFileSync(KEY_FILE, 'utf8').trim();
     if (/^[0-9a-f]{64}$/i.test(fromFile)) {
@@ -52,6 +66,7 @@ export function encryptPassword(plain: string): string {
 /** Every key that may have been used to save a password: current first, then older ones. */
 function allKeys(): Buffer[] {
   const keys: Buffer[] = [getKey()];
+  if (sharedKey && !keys.some(k => k.equals(sharedKey!))) keys.push(sharedKey);
   const add = (hex: string) => {
     const h = hex.trim();
     if (/^[0-9a-f]{64}$/i.test(h) && !keys.some(k => k.toString('hex') === h.toLowerCase())) {

@@ -14,7 +14,7 @@ import {
 } from '../src/types';
 import { isManagerial, roleLabel } from '../src/lib/roles';
 import { TEAM_ROSTER } from './team';
-import { encryptPassword, decryptPassword } from './vault';
+import { encryptPassword, decryptPassword, envVaultKey, setSharedVaultKey, newVaultKeyHex } from './vault';
 import { pgConnectionConfig, isLocalDatabase } from './pgConfig';
 import { copyFromPreviousDatabase, restoreAccountsBackup, saveAccountsBackup } from './carryOver';
 import { sendTaskEmail, emailConfigured } from './mailer';
@@ -204,6 +204,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_enc TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS credentials_version INT NOT NULL DEFAULT 0;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS vault_key TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS retention_days INT NOT NULL DEFAULT 90;
 ALTER TABLE content_items ADD COLUMN IF NOT EXISTS editor_notes TEXT;
@@ -1504,6 +1505,19 @@ class RelationalDatabase {
           }
         }
       }
+
+      // Password vault key. PASSWORD_VAULT_KEY (env) wins; otherwise one key is created once and
+      // kept in the database, so every server process, restart and redeploy uses the same key —
+      // Admins can always see passwords set from now on.
+      await client.query(
+        `UPDATE settings SET vault_key = $1 WHERE id = (SELECT MIN(id) FROM settings) AND vault_key IS NULL`,
+        [newVaultKeyHex()]
+      );
+      const { rows: vk } = await client.query('SELECT vault_key FROM settings WHERE vault_key IS NOT NULL ORDER BY id LIMIT 1');
+      if (vk[0]?.vault_key) setSharedVaultKey(vk[0].vault_key); // also used to read older copies
+      console.log(envVaultKey()
+        ? '🔐 Password key: PASSWORD_VAULT_KEY (database key also accepted for reading)'
+        : '🔐 Password key: stored in the database (same for every server and redeploy)');
 
       // Hosted databases (e.g. Supabase) publish every table in the "public" schema through
       // their REST API. Turn on Row Level Security with no policies so that API can't read or
