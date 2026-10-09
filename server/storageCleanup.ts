@@ -96,14 +96,14 @@ export async function runStorageLifecycleCleanup(retentionDays = 90): Promise<Cl
   // Clean stale temp chunks first
   const chunksCleaned = cleanStaleChunks();
 
-  // Find all content items with media older than cutoff date
-  // Either scheduled_date < cutoffDate OR video_uploaded_at < cutoff
+  // Uploaded files (videos, designs, PDFs, ZIPs) of tasks whose scheduled post date is more
+  // than `days` days ago. The task itself is kept as a record; only the file is deleted.
   const { rows } = await pool.query(
     `SELECT id, title, video_url, video_filename, video_filesize, scheduled_date, video_uploaded_at
        FROM content_items
-      WHERE (scheduled_date < $1 OR (video_uploaded_at IS NOT NULL AND video_uploaded_at < $2))
+      WHERE scheduled_date < $1
         AND (video_url IS NOT NULL OR video_filename IS NOT NULL)`,
-    [cutoffDateStr, cutoff.toISOString()]
+    [cutoffDateStr]
   );
 
   let filesDeleted = 0;
@@ -218,9 +218,9 @@ export async function getStorageUsageStats(retentionDays = 90): Promise<StorageS
   const { rows } = await pool.query(
     `SELECT id, video_url, video_filename, video_filesize
        FROM content_items
-      WHERE (scheduled_date < $1 OR (video_uploaded_at IS NOT NULL AND video_uploaded_at < $2))
+      WHERE scheduled_date < $1
         AND (video_url IS NOT NULL OR video_filename IS NOT NULL)`,
-    [cutoffDateStr, cutoff.toISOString()]
+    [cutoffDateStr]
   );
 
   let reclaimableBytes = 0;

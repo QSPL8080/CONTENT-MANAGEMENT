@@ -135,7 +135,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
           <div>
             <h3 className="font-bold text-slate-900 text-sm">Automated 90-Day Storage Cleanup Active</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              The system automatically purges media files and temporary upload chunks older than 90 days in the background to prevent server disk overflow. All post records, captions, and history remain intact.
+              Uploaded videos, designs and other files are deleted automatically 90 days after the task's scheduled post date, so storage never fills up. The tasks themselves — titles, captions, dates and history — stay.
             </p>
           </div>
         </div>
