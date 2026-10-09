@@ -44,7 +44,9 @@ import {
 
 const VIDEO_EXT = ['.mp4', '.mov', '.webm', '.m4v', '.mkv', '.avi', '.wmv', '.flv', '.3gp', '.ts', '.mts', '.m2ts', '.ogv', '.ogg', '.qt'];
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
-const ACCEPT_ATTR = 'video/*,image/jpeg,image/png,image/webp,image/gif,application/pdf,.zip,' + [...VIDEO_EXT, ...IMAGE_EXT, '.pdf', '.zip'].join(',');
+// Documents: PDF, Word, Excel, PowerPoint, text, design source files, archives
+const DOC_EXT = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.rtf', '.odt', '.ods', '.odp', '.psd', '.ai', '.eps', '.cdr', '.indd', '.zip', '.rar', '.7z'];
+const ACCEPT_ATTR = 'video/*,image/jpeg,image/png,image/webp,image/gif,' + [...VIDEO_EXT, ...IMAGE_EXT, ...DOC_EXT].join(',');
 
 function extOf(name?: string) {
   if (!name) return '';
@@ -209,10 +211,10 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
   const processVideoFile = async (file: File) => {
     if (!file) return;
 
-    // Videos (Video Editors) or images / PDF / ZIP (Graphic Designers)
+    // Videos, images, or documents (PDF, Word, Excel, PowerPoint, design files, ZIP…)
     const ext = extOf(file.name);
-    if (!ext || ![...VIDEO_EXT, ...IMAGE_EXT, '.pdf', '.zip'].includes(ext)) {
-      setUploadError('Unsupported file. Upload a video (MP4, MOV, WEBM…), an image (JPG, PNG, WEBP, GIF), a PDF or a ZIP.');
+    if (!ext || ![...VIDEO_EXT, ...IMAGE_EXT, ...DOC_EXT].includes(ext)) {
+      setUploadError('Unsupported file. Upload a video (MP4, MOV…), an image (JPG, PNG…) or a document (PDF, Word, Excel, PowerPoint, ZIP…).');
       return;
     }
     if (file.size > 2 * 1024 * 1024 * 1024) {
@@ -560,7 +562,7 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
                       <div className="absolute inset-0 bg-blue-600/90 z-30 flex flex-col items-center justify-center text-white p-6 text-center animate-in fade-in duration-150">
                         <UploadCloud className="w-12 h-12 mb-2 animate-bounce" />
                         <span className="text-base font-bold">Drop the final file here</span>
-                        <span className="text-xs text-blue-100 mt-1">Video, image, PDF or ZIP</span>
+                        <span className="text-xs text-blue-100 mt-1">Video, image or document (PDF, Word, Excel…)</span>
                       </div>
                     )}
 

@@ -10,6 +10,7 @@ import {
   HeadObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
+  CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -31,7 +32,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
  * private link that works for 1 hour.
  */
 
-const PREFIX = 'uploads/';
+/** Old layout (everything in uploads/) — moved into the type folders below on start-up. */
+const LEGACY_PREFIX = 'uploads/';
 const DEFAULT_ACCOUNT_ID = '314b20b9b41e428050dbadd176edade4'; // Quickupp's Cloudflare account (not secret)
 const DEFAULT_BUCKET = 'quickuppcms-uploads';
 export const R2_PART_SIZE = 10 * 1024 * 1024;
@@ -64,7 +66,20 @@ function s3(): S3Client {
   return client;
 }
 const bucket = () => cfg().bucket;
-const keyOf = (storedName: string) => PREFIX + storedName;
+/**
+ * Files are kept in folders by type:  videos/  images/  documents/ (PDF, Word, Excel, ZIP… —
+ * everything that isn't a video or an image). The folder comes from the file extension.
+ */
+const VIDEO_EXT = ['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.wmv', '.flv', '.3gp', '.ts', '.mts', '.m2ts', '.ogv', '.ogg'];
+const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+export function folderFor(storedName: string): string {
+  const dot = storedName.lastIndexOf('.');
+  const ext = dot >= 0 ? storedName.slice(dot).toLowerCase() : '';
+  if (VIDEO_EXT.includes(ext)) return 'videos';
+  if (IMAGE_EXT.includes(ext)) return 'images';
+  return 'documents';
+}
+const keyOf = (storedName: string) => `${folderFor(storedName)}/${storedName}`;
 
 export async function r2StartUpload(storedName: string, contentType: string): Promise<string> {
   const out = await s3().send(new CreateMultipartUploadCommand({
@@ -161,7 +176,7 @@ export async function r2Usage(): Promise<{ bytes: number; files: number }> {
   let files = 0;
   let token: string | undefined;
   do {
-    const out = await s3().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: PREFIX, ContinuationToken: token }));
+    const out = await s3().send(new ListObjectsV2Command({ Bucket: bucket(), ContinuationToken: token }));
     for (const o of out.Contents || []) {
       bytes += Number(o.Size || 0);
       files += 1;
@@ -169,4 +184,30 @@ export async function r2Usage(): Promise<{ bytes: number; files: number }> {
     token = out.IsTruncated ? out.NextContinuationToken : undefined;
   } while (token);
   return { bytes, files };
+}
+
+/**
+ * One-time tidy-up: files stored under the old uploads/ folder are moved into their type
+ * folder (videos/, images/, documents/). Safe to run again — it only touches what's left.
+ */
+export async function r2MoveLegacyToFolders(): Promise<number> {
+  let moved = 0;
+  let token: string | undefined;
+  do {
+    const out = await s3().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: LEGACY_PREFIX, ContinuationToken: token }));
+    for (const o of out.Contents || []) {
+      const oldKey = o.Key || '';
+      const name = oldKey.slice(LEGACY_PREFIX.length);
+      if (!name || name.includes('/')) continue;
+      await s3().send(new CopyObjectCommand({
+        Bucket: bucket(),
+        CopySource: `${bucket()}/${encodeURIComponent(oldKey).replace(/%2F/g, '/')}`,
+        Key: keyOf(name),
+      }));
+      await s3().send(new DeleteObjectCommand({ Bucket: bucket(), Key: oldKey }));
+      moved++;
+    }
+    token = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (token);
+  return moved;
 }

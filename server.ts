@@ -69,15 +69,16 @@ const ISSUE_TYPES = [
 ];
 
 // ---------------------------------------------------------------------------
-// Final asset uploads (videos for Video Editors, images/PDF/ZIP for Graphic Designers)
+// Final asset uploads: videos, images, and documents (PDF, Word, Excel, PowerPoint, design files, ZIP…)
 // ---------------------------------------------------------------------------
 const VIDEO_EXTENSIONS = [
   '.mp4', '.mov', '.webm', '.m4v', '.mkv',
   '.avi', '.wmv', '.flv', '.3gp', '.ts',
   '.mts', '.m2ts', '.ogv', '.ogg', '.qt',
 ];
-const DESIGN_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf', '.zip'];
-const ALLOWED_EXTENSIONS = [...VIDEO_EXTENSIONS, ...DESIGN_EXTENSIONS];
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+const DOCUMENT_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.rtf', '.odt', '.ods', '.odp', '.psd', '.ai', '.eps', '.cdr', '.indd', '.zip', '.rar', '.7z'];
+const ALLOWED_EXTENSIONS = [...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS, ...DOCUMENT_EXTENSIONS];
 
 const MIME_BY_EXT: Record<string, string> = {
   '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.qt': 'video/quicktime',
@@ -86,6 +87,17 @@ const MIME_BY_EXT: Record<string, string> = {
   '.ogv': 'video/ogg', '.ogg': 'video/ogg',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
   '.pdf': 'application/pdf', '.zip': 'application/zip',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.txt': 'text/plain; charset=utf-8', '.csv': 'text/csv; charset=utf-8', '.rtf': 'application/rtf',
+  '.odt': 'application/vnd.oasis.opendocument.text', '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.odp': 'application/vnd.oasis.opendocument.presentation',
+  '.psd': 'image/vnd.adobe.photoshop', '.ai': 'application/postscript', '.eps': 'application/postscript',
+  '.rar': 'application/vnd.rar', '.7z': 'application/x-7z-compressed',
 };
 
 /**
@@ -125,7 +137,7 @@ const upload = multer({
     if (ALLOWED_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`Unsupported file type "${ext || 'unknown'}". Allowed: videos (MP4, MOV, WEBM…), images (JPG, PNG, WEBP, GIF), PDF or ZIP.`));
+      cb(new Error(`Unsupported file type "${ext || 'unknown'}". Allowed: videos (MP4, MOV, WEBM…), images (JPG, PNG, WEBP, GIF) and documents (PDF, Word, Excel, PowerPoint, TXT, CSV, PSD, AI, ZIP, RAR…).`));
     }
   },
 });
@@ -885,7 +897,7 @@ async function startServer() {
     const filesize = Number(req.body?.filesize || 0);
     const ext = path.extname(filename).toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return res.status(400).json({ error: `Unsupported file type "${ext || 'unknown'}". Allowed: videos (MP4, MOV, WEBM…), images (JPG, PNG, WEBP, GIF), PDF or ZIP.` });
+      return res.status(400).json({ error: `Unsupported file type "${ext || 'unknown'}". Allowed: videos (MP4, MOV, WEBM…), images (JPG, PNG, WEBP, GIF) and documents (PDF, Word, Excel, PowerPoint, TXT, CSV, PSD, AI, ZIP, RAR…).` });
     }
     if (!filesize || filesize > R2_MAX_BYTES) {
       return res.status(400).json({ error: 'File size exceeds the 2 GB limit.' });

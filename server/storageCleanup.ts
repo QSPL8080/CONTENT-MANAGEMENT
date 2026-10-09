@@ -3,7 +3,7 @@ import path from 'path';
 import { pool } from './db';
 
 import { UPLOADS_DIR } from './paths';
-import { r2Enabled, r2Delete, r2Usage, r2PutFile } from './fileStore';
+import { r2Enabled, r2Delete, r2Usage, r2PutFile, r2MoveLegacyToFolders } from './fileStore';
 const TEMP_UPLOADS_DIR = path.join(UPLOADS_DIR, 'temp_chunks');
 
 export interface CleanupResult {
@@ -254,6 +254,13 @@ const MIME: Record<string, string> = {
   '.ogv': 'video/ogg', '.ogg': 'video/ogg',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
   '.pdf': 'application/pdf', '.zip': 'application/zip',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.txt': 'text/plain; charset=utf-8', '.csv': 'text/csv; charset=utf-8',
 };
 
 let migrating = false;
@@ -267,6 +274,13 @@ export async function moveServerFilesToR2(): Promise<{ moved: number; removed: n
   if (!r2Enabled() || migrating || !fs.existsSync(UPLOADS_DIR)) return result;
   migrating = true;
   try {
+    // Older R2 files from the single uploads/ folder → videos/, images/, documents/
+    try {
+      const n = await r2MoveLegacyToFolders();
+      if (n > 0) console.log(`☁️  [Storage] Sorted ${n} file(s) in Cloudflare R2 into videos/, images/, documents/`);
+    } catch (err: any) {
+      console.warn(`[Storage] Could not sort R2 files into folders: ${err.message}`);
+    }
     const files = fs.readdirSync(UPLOADS_DIR, { withFileTypes: true })
       .filter(e => e.isFile() && !e.name.startsWith('sample-reel-') && !e.name.startsWith('.'))
       .map(e => e.name);
