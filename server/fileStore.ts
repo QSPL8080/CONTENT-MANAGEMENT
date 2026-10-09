@@ -14,12 +14,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 /**
  * Cloudflare R2 storage for uploaded designs and videos.
  *
- * Switched on by setting these on the server (Hostinger → Environment variables):
- *   R2_ACCOUNT_ID         Cloudflare account ID (R2 → Overview, right side)
+ * Quickupp's bucket is built in (account below, bucket "quickuppcms-uploads"). It switches on
+ * as soon as the two keys are set on the server (Hostinger → Environment variables):
  *   R2_ACCESS_KEY_ID      R2 API token → Access Key ID
  *   R2_SECRET_ACCESS_KEY  R2 API token → Secret Access Key
- *   R2_BUCKET             bucket name, e.g. contentops-uploads
- *   R2_ENDPOINT           optional — only to use a different S3-compatible endpoint
+ * Optional overrides: R2_ACCOUNT_ID, R2_BUCKET, R2_ENDPOINT (another S3-compatible endpoint).
  *
  * When they are not set, files keep going to the server's uploads folder (UPLOADS_DIR).
  * Files uploaded before R2 was switched on stay where they are and keep working.
@@ -31,13 +30,15 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
  */
 
 const PREFIX = 'uploads/';
+const DEFAULT_ACCOUNT_ID = '314b20b9b41e428050dbadd176edade4'; // Quickupp's Cloudflare account (not secret)
+const DEFAULT_BUCKET = 'quickuppcms-uploads';
 export const R2_PART_SIZE = 10 * 1024 * 1024;
 
 function cfg() {
-  const accountId = (process.env.R2_ACCOUNT_ID || '').trim();
+  const accountId = (process.env.R2_ACCOUNT_ID || '').trim() || DEFAULT_ACCOUNT_ID;
   const accessKeyId = (process.env.R2_ACCESS_KEY_ID || '').trim();
   const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || '').trim();
-  const bucket = (process.env.R2_BUCKET || '').trim();
+  const bucket = (process.env.R2_BUCKET || '').trim() || DEFAULT_BUCKET;
   const endpoint = (process.env.R2_ENDPOINT || '').trim() || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
   return { accessKeyId, secretAccessKey, bucket, endpoint };
 }
