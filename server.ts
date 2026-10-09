@@ -38,6 +38,8 @@ import {
 import type { ContentItem, ContentStatus, User, Platform } from './src/types';
 
 const PORT = Number(process.env.PORT || 3000);
+/** Shown on /api/health so you can see which build is live. */
+const APP_VERSION = '2026-10-09 R2 folders';
 import { UPLOADS_DIR } from './server/paths';
 import {
   r2Enabled, R2_PART_SIZE, r2StartUpload, r2SignParts, r2CompleteUpload, r2AbortUpload, r2FileUrl, r2Delete, r2PutFile,
@@ -258,9 +260,17 @@ async function startServer() {
   // Public endpoints
   // -------------------------------------------------------------------------
   app.get('/api/health', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const keyId = (process.env.R2_ACCESS_KEY_ID || '').trim();
+    const secret = (process.env.R2_SECRET_ACCESS_KEY || '').trim();
     res.status(dbState.ready ? 200 : 503).json({
       status: dbState.ready ? 'ok' : 'database_unavailable',
       database: dbState.ready ? 'connected' : dbState.error,
+      // Where uploaded files go — "cloudflare-r2" when both R2 keys are set on the server
+      storage: r2Enabled() ? 'cloudflare-r2' : 'server-disk',
+      r2_keys: { access_key_id: keyId ? 'set' : 'missing', secret_access_key: secret ? 'set' : 'missing' },
+      node: process.version,
+      version: APP_VERSION,
       timestamp: new Date().toISOString(),
     });
   });
