@@ -39,6 +39,9 @@ import type { ContentItem, ContentStatus, User, Platform } from './src/types';
 
 const PORT = Number(process.env.PORT || 3000);
 import { UPLOADS_DIR } from './server/paths';
+import {
+  r2Enabled, R2_PART_SIZE, r2StartUpload, r2SignParts, r2CompleteUpload, r2AbortUpload, r2FileUrl, r2Delete,
+} from './server/fileStore';
 // Express request augmented with the signed-in user
 interface AuthedRequest extends Request {
   user: User;
@@ -71,6 +74,23 @@ const MIME_BY_EXT: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
   '.pdf': 'application/pdf', '.zip': 'application/zip',
 };
+
+/**
+ * After a file is replaced: delete the old one (from this server or from R2) so it doesn't
+ * keep using space — unless another task (e.g. a duplicate) still uses it. Runs in background.
+ */
+function removeReplacedFile(previousUrl?: string | null) {
+  if (!previousUrl || !previousUrl.startsWith('/api/videos/')) return;
+  const name = path.basename(previousUrl);
+  if (!name || name.startsWith('sample-reel-')) return; // bundled demo clips
+  (async () => {
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM content_items WHERE video_url = $1', [previousUrl]);
+    if (rows[0]?.n > 0) return;
+    const local = path.join(UPLOADS_DIR, name);
+    if (fs.existsSync(local)) fs.unlinkSync(local);
+    else if (r2Enabled()) await r2Delete(name);
+  })().catch(err => console.warn(`⚠️  Could not remove replaced file ${name}: ${err.message}`));
+}
 
 function safeStoredName(originalName: string) {
   const ext = path.extname(originalName).toLowerCase() || '.mp4';
@@ -742,12 +762,14 @@ async function startServer() {
         if (!file) return res.status(400).json({ error: 'No file provided' });
 
         const videoUrl = `/api/videos/${file.filename}`;
+        const previousUrl = (await db.getContentById(req.params.id))?.video_url;
         const updated = await db.uploadVideoForContent(
           req.params.id,
           { video_url: videoUrl, video_filename: file.originalname, video_filesize: file.size },
           (req as AuthedRequest).user
         );
         if (!updated) return res.status(404).json({ error: 'Content not found' });
+        removeReplacedFile(previousUrl);
 
         res.json({ success: true, content: updated, file: { url: videoUrl, filename: file.originalname, size: file.size } });
       } catch (e: any) {
@@ -808,12 +830,14 @@ async function startServer() {
 
         const stat = fs.statSync(finalPath);
         const videoUrl = `/api/videos/${uniqueName}`;
+        const previousUrl = (await db.getContentById(contentId))?.video_url;
         const updated = await db.uploadVideoForContent(
           contentId,
           { video_url: videoUrl, video_filename: String(filename), video_filesize: stat.size || parseInt(String(filesize), 10) || 0 },
           (req as AuthedRequest).user
         );
         if (!updated) return res.status(404).json({ error: 'Content item not found' });
+        removeReplacedFile(previousUrl);
 
         return res.json({ success: true, content: updated, file: { url: videoUrl, filename, size: stat.size } });
       } catch (assembleErr: any) {
@@ -822,6 +846,71 @@ async function startServer() {
       }
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Cloudflare R2 (when configured): the browser uploads straight to R2 in 10 MB parts;
+  // the server only checks permission and signs the requests. See server/fileStore.ts.
+  // -------------------------------------------------------------------------
+  const R2_MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+  const r2Pending = new Map<string, { storedName: string; contentId: string; userId: string; filename: string; at: number }>();
+  const r2PendingFor = (req: AuthedRequest) => {
+    const uploadId = String(req.body?.uploadId || '');
+    const p = r2Pending.get(uploadId);
+    return p && p.contentId === req.params.id && p.userId === req.user.id ? { uploadId, ...p } : null;
+  };
+
+  app.post('/api/content/:id/r2-upload/start', uploadGuard, asyncHandler(async (req, res) => {
+    if (!r2Enabled()) return res.json({ enabled: false });
+    const filename = String(req.body?.filename || '').slice(0, 200);
+    const filesize = Number(req.body?.filesize || 0);
+    const ext = path.extname(filename).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({ error: `Unsupported file type "${ext || 'unknown'}". Allowed: videos (MP4, MOV, WEBM…), images (JPG, PNG, WEBP, GIF), PDF or ZIP.` });
+    }
+    if (!filesize || filesize > R2_MAX_BYTES) {
+      return res.status(400).json({ error: 'File size exceeds the 2 GB limit.' });
+    }
+    // forget uploads that were never finished (older than 12 h)
+    for (const [id, p] of r2Pending) if (Date.now() - p.at > 12 * 3600_000) r2Pending.delete(id);
+
+    const storedName = safeStoredName(filename);
+    const uploadId = await r2StartUpload(storedName, MIME_BY_EXT[ext] || 'application/octet-stream');
+    r2Pending.set(uploadId, { storedName, contentId: req.params.id, userId: req.user.id, filename, at: Date.now() });
+    const totalParts = Math.max(1, Math.ceil(filesize / R2_PART_SIZE));
+    const urls = await r2SignParts(storedName, uploadId, Array.from({ length: totalParts }, (_, i) => i + 1));
+    res.json({ enabled: true, uploadId, partSize: R2_PART_SIZE, totalParts, urls });
+  }));
+
+  app.post('/api/content/:id/r2-upload/complete', uploadGuard, asyncHandler(async (req, res) => {
+    const p = r2PendingFor(req);
+    if (!p) return res.status(400).json({ error: 'This upload has expired — please upload the file again.' });
+    const parts = (Array.isArray(req.body?.parts) ? req.body.parts : [])
+      .map((x: any) => ({ PartNumber: Number(x?.PartNumber), ETag: String(x?.ETag || '') }))
+      .filter((x: { PartNumber: number; ETag: string }) => x.PartNumber > 0 && x.ETag);
+    if (parts.length === 0) return res.status(400).json({ error: 'No uploaded parts were reported.' });
+
+    const size = await r2CompleteUpload(p.storedName, p.uploadId, parts);
+    r2Pending.delete(p.uploadId);
+    const videoUrl = `/api/videos/${p.storedName}`;
+    const previousUrl = (await db.getContentById(req.params.id))?.video_url;
+    const updated = await db.uploadVideoForContent(
+      req.params.id,
+      { video_url: videoUrl, video_filename: p.filename, video_filesize: size },
+      req.user
+    );
+    if (!updated) return res.status(404).json({ error: 'Content not found' });
+    removeReplacedFile(previousUrl);
+    res.json({ success: true, content: updated, file: { url: videoUrl, filename: p.filename, size } });
+  }));
+
+  app.post('/api/content/:id/r2-upload/abort', uploadGuard, asyncHandler(async (req, res) => {
+    const p = r2PendingFor(req);
+    if (p) {
+      r2Pending.delete(p.uploadId);
+      await r2AbortUpload(p.storedName, p.uploadId).catch(() => {});
+    }
+    res.json({ success: true });
+  }));
 
   // Demo sample clip (Admin & Manager only — so real tasks can't be "completed" with a sample)
   app.post('/api/content/:id/attach-sample-video', asyncHandler(async (req, res) => {
@@ -1079,26 +1168,29 @@ async function startServer() {
   // -------------------------------------------------------------------------
   // Final file streaming & download (signed-in + must be allowed to see the content)
   // -------------------------------------------------------------------------
-  async function resolveFileForUser(req: AuthedRequest, res: Response): Promise<{ filePath: string; content?: ContentItem } | null> {
+  // filePath = on this server's disk; null = stored in Cloudflare R2
+  async function resolveFileForUser(req: AuthedRequest, res: Response): Promise<{ filePath: string | null; storedName: string; content?: ContentItem } | null> {
     const sanitized = path.basename(req.params.filename);
-    const filePath = path.join(UPLOADS_DIR, sanitized);
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    const localPath = path.join(UPLOADS_DIR, sanitized);
+    const isLocal = fs.existsSync(localPath) && fs.statSync(localPath).isFile();
+    if (!isLocal && !r2Enabled()) {
       res.status(404).json({ error: 'File not found' });
       return null;
     }
+    const filePath = isLocal ? localPath : null;
     const matches = await db.getContentList({ visibleTo: req.user });
     const content = matches.find(c => c.video_url === `/api/videos/${sanitized}`);
     if (!content && !isManagerial(req.user.role)) {
       res.status(404).json({ error: 'File not found' });
       return null;
     }
-    return { filePath, content };
+    return { filePath, storedName: sanitized, content };
   }
 
   app.get('/api/videos/:filename/download', asyncHandler(async (req, res) => {
     const resolved = await resolveFileForUser(req, res);
     if (!resolved) return;
-    const { filePath, content } = resolved;
+    const { filePath, storedName, content } = resolved;
 
     if (content) {
       await db.logActivity({
@@ -1107,11 +1199,16 @@ async function startServer() {
         user_name: req.user.name,
         user_role: req.user.role,
         action: 'downloaded_video',
-        description: `${req.user.name} downloaded ${content.video_filename || path.basename(filePath)}.`,
+        description: `${req.user.name} downloaded ${content.video_filename || storedName}.`,
       });
     }
 
-    const downloadName = content?.video_filename || path.basename(filePath);
+    const downloadName = content?.video_filename || storedName;
+    if (!filePath) {
+      // Cloudflare R2 → private download link (1 hour)
+      const ext = path.extname(storedName).toLowerCase();
+      return res.redirect(302, await r2FileUrl(storedName, { downloadName, contentType: MIME_BY_EXT[ext] }));
+    }
     res.download(filePath, downloadName, (err) => {
       if (err && !res.headersSent) {
         res.status(500).json({ error: 'Failed to download the file. Please retry.' });
@@ -1123,7 +1220,13 @@ async function startServer() {
   app.get('/api/videos/:filename', asyncHandler(async (req, res) => {
     const resolved = await resolveFileForUser(req, res);
     if (!resolved) return;
-    const { filePath } = resolved;
+    const { filePath, storedName } = resolved;
+    if (!filePath) {
+      // Cloudflare R2 → private viewing link (1 hour); R2 handles video seeking (Range)
+      const ext = path.extname(storedName).toLowerCase();
+      res.setHeader('Cache-Control', 'private, max-age=600');
+      return res.redirect(302, await r2FileUrl(storedName, { contentType: MIME_BY_EXT[ext] || 'application/octet-stream' }));
+    }
 
     const fileSize = fs.statSync(filePath).size;
     const mimeType = MIME_BY_EXT[path.extname(filePath).toLowerCase()] || 'application/octet-stream';

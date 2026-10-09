@@ -148,6 +148,13 @@ export const api = {
     file: File, 
     onProgress?: (percent: number) => void
   ): Promise<{ content: ContentItem; file?: any }> => {
+    // Cloudflare R2 switched on → upload straight to R2 (fast, doesn't touch the web server)
+    const viaR2 = await uploadVideoToR2(contentId, file, onProgress);
+    if (viaR2) return viaR2;
+    if (file.size > 500 * 1024 * 1024) {
+      throw new ApiError('File is larger than the 500MB limit.', 400);
+    }
+
     // If file is > 15MB, use chunked upload to completely bypass proxy body size limits (e.g. 32MB)
     if (file.size > 15 * 1024 * 1024) {
       return uploadVideoChunked(contentId, file, onProgress);
@@ -275,6 +282,99 @@ export const api = {
 };
 
 // --- Resilient Video Upload Internals ---
+
+/**
+ * Cloudflare R2: the server signs one link per 10 MB part, the browser sends the parts
+ * straight to R2 (3 at a time, each retried up to 4 times), then the server completes it.
+ * Returns null when R2 isn't switched on, so the normal upload is used instead.
+ */
+async function uploadVideoToR2(
+  contentId: string,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<{ content: ContentItem; file?: any } | null> {
+  let start: { enabled: boolean; uploadId?: string; partSize?: number; totalParts?: number; urls?: Record<string, string> };
+  try {
+    start = await request(`/api/content/${contentId}/r2-upload/start`, {
+      method: 'POST',
+      body: JSON.stringify({ filename: file.name, filesize: file.size }),
+    });
+  } catch (err: any) {
+    if (err?.status === 404 && /not found/i.test(err?.message || '')) return null; // older server
+    throw err;
+  }
+  if (!start.enabled || !start.uploadId || !start.partSize || !start.totalParts || !start.urls) return null;
+
+  const { uploadId, partSize, totalParts, urls } = start;
+  const loaded = new Array<number>(totalParts).fill(0);
+  const report = () => {
+    if (!onProgress) return;
+    const sum = loaded.reduce((a, b) => a + b, 0);
+    onProgress(Math.min(99, Math.round((sum / file.size) * 100)));
+  };
+  const parts: { PartNumber: number; ETag: string }[] = [];
+
+  const putPart = (n: number, attempt = 1): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const blob = file.slice((n - 1) * partSize, Math.min(n * partSize, file.size));
+      const xhr = new XMLHttpRequest();
+      const retry = (reason: string) => {
+        loaded[n - 1] = 0;
+        report();
+        if (attempt < 4) {
+          setTimeout(() => putPart(n, attempt + 1).then(resolve, reject), 1000 * attempt);
+        } else {
+          reject(new Error(`Upload of part ${n} of ${totalParts} failed (${reason}). Check your internet connection and try again.`));
+        }
+      };
+      xhr.open('PUT', urls[String(n)], true);
+      xhr.upload.onprogress = (e) => {
+        loaded[n - 1] = e.loaded;
+        report();
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const etag = xhr.getResponseHeader('ETag');
+          if (!etag) {
+            reject(new Error('Cloudflare R2 did not return the upload receipt. In the R2 bucket CORS policy, "ExposeHeaders" must include "ETag".'));
+            return;
+          }
+          loaded[n - 1] = blob.size;
+          report();
+          parts.push({ PartNumber: n, ETag: etag });
+          resolve();
+        } else {
+          retry(`status ${xhr.status}`);
+        }
+      };
+      xhr.onerror = () => retry('network error');
+      xhr.send(blob);
+    });
+
+  let next = 1;
+  const worker = async () => {
+    while (next <= totalParts) {
+      const n = next++;
+      await putPart(n);
+    }
+  };
+  try {
+    await Promise.all([worker(), worker(), worker()]);
+  } catch (err) {
+    request(`/api/content/${contentId}/r2-upload/abort`, {
+      method: 'POST',
+      body: JSON.stringify({ uploadId }),
+    }).catch(() => {});
+    throw err;
+  }
+
+  const done = await request<{ content: ContentItem; file?: any }>(`/api/content/${contentId}/r2-upload/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ uploadId, parts }),
+  });
+  onProgress?.(100);
+  return done;
+}
 
 async function uploadVideoDirect(
   contentId: string,

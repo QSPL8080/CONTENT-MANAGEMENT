@@ -3,6 +3,7 @@ import path from 'path';
 import { pool } from './db';
 
 import { UPLOADS_DIR } from './paths';
+import { r2Enabled, r2Delete, r2Usage } from './fileStore';
 const TEMP_UPLOADS_DIR = path.join(UPLOADS_DIR, 'temp_chunks');
 
 export interface CleanupResult {
@@ -111,10 +112,12 @@ export async function runStorageLifecycleCleanup(retentionDays = 90): Promise<Cl
   const purgedItems: { id: string; title: string; filename?: string; bytes?: number }[] = [];
 
   for (const item of rows) {
-    let rawFilename = item.video_filename;
-    if (!rawFilename && item.video_url) {
-      rawFilename = path.basename(item.video_url.replace('/download', ''));
-    }
+    // The stored file name is in video_url (/api/videos/<stored name>); video_filename is the
+    // original name the person uploaded, so it is only a fallback.
+    let rawFilename = item.video_url
+      ? path.basename(String(item.video_url).replace(/\/download$/, ''))
+      : item.video_filename;
+    if (rawFilename && path.basename(rawFilename).startsWith('sample-reel-')) rawFilename = null; // bundled demo clips
 
     let freedForItem = 0;
     if (rawFilename) {
@@ -129,6 +132,13 @@ export async function runStorageLifecycleCleanup(retentionDays = 90): Promise<Cl
           bytesFreed += freedForItem;
         } catch (err: any) {
           console.warn(`[Storage Lifecycle] Could not delete file ${filePath}: ${err.message}`);
+        }
+      } else if (r2Enabled()) {
+        // Stored in Cloudflare R2
+        freedForItem = await r2Delete(sanitized);
+        if (freedForItem > 0) {
+          filesDeleted++;
+          bytesFreed += freedForItem;
         }
       }
     }
@@ -192,7 +202,18 @@ export async function getStorageUsageStats(retentionDays = 90): Promise<StorageS
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const cutoffDateStr = cutoff.toISOString().slice(0, 10);
 
-  const { totalBytes, totalFiles } = getDirStats(UPLOADS_DIR);
+  const local = getDirStats(UPLOADS_DIR);
+  let totalBytes = local.totalBytes;
+  let totalFiles = local.totalFiles;
+  if (r2Enabled()) {
+    try {
+      const r2 = await r2Usage();
+      totalBytes += r2.bytes;
+      totalFiles += r2.files;
+    } catch (err: any) {
+      console.warn(`[Storage] Could not read Cloudflare R2 usage: ${err.message}`);
+    }
+  }
 
   const { rows } = await pool.query(
     `SELECT id, video_url, video_filename, video_filesize

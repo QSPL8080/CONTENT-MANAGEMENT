@@ -215,8 +215,8 @@ export const ContentDetailModal: React.FC<ContentDetailModalProps> = ({
       setUploadError('Unsupported file. Upload a video (MP4, MOV, WEBM…), an image (JPG, PNG, WEBP, GIF), a PDF or a ZIP.');
       return;
     }
-    if (file.size > 500 * 1024 * 1024) {
-      setUploadError('File is larger than the 500MB limit.');
+    if (file.size > 2 * 1024 * 1024 * 1024) {
+      setUploadError('File is larger than the 2 GB limit.');
       return;
     }
 
