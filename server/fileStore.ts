@@ -1,5 +1,7 @@
+import fs from 'fs';
 import {
   S3Client,
+  PutObjectCommand,
   CreateMultipartUploadCommand,
   UploadPartCommand,
   CompleteMultipartUploadCommand,
@@ -95,6 +97,22 @@ export async function r2CompleteUpload(
   }));
   const head = await s3().send(new HeadObjectCommand({ Bucket: bucket(), Key: keyOf(storedName) }));
   return Number(head.ContentLength || 0);
+}
+
+/** Copies a file from this server into R2 (used for uploads that came through the server, and
+ *  to move older files off the server). Returns the size stored. */
+export async function r2PutFile(localPath: string, storedName: string, contentType: string): Promise<number> {
+  const size = fs.statSync(localPath).size;
+  await s3().send(new PutObjectCommand({
+    Bucket: bucket(),
+    Key: keyOf(storedName),
+    Body: fs.createReadStream(localPath),
+    ContentLength: size,
+    ContentType: contentType,
+  }));
+  const head = await s3().send(new HeadObjectCommand({ Bucket: bucket(), Key: keyOf(storedName) }));
+  if (Number(head.ContentLength || 0) !== size) throw new Error('size check failed after copying to R2');
+  return size;
 }
 
 export async function r2AbortUpload(storedName: string, uploadId: string): Promise<void> {

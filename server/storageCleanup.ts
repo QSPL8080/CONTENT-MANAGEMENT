@@ -3,7 +3,7 @@ import path from 'path';
 import { pool } from './db';
 
 import { UPLOADS_DIR } from './paths';
-import { r2Enabled, r2Delete, r2Usage } from './fileStore';
+import { r2Enabled, r2Delete, r2Usage, r2PutFile } from './fileStore';
 const TEMP_UPLOADS_DIR = path.join(UPLOADS_DIR, 'temp_chunks');
 
 export interface CleanupResult {
@@ -247,6 +247,61 @@ export async function getStorageUsageStats(retentionDays = 90): Promise<StorageS
   };
 }
 
+const MIME: Record<string, string> = {
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.qt': 'video/quicktime',
+  '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.wmv': 'video/x-ms-wmv',
+  '.flv': 'video/x-flv', '.3gp': 'video/3gpp', '.ts': 'video/mp2t', '.mts': 'video/mp2t', '.m2ts': 'video/mp2t',
+  '.ogv': 'video/ogg', '.ogg': 'video/ogg',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
+  '.pdf': 'application/pdf', '.zip': 'application/zip',
+};
+
+let migrating = false;
+/**
+ * Cloudflare R2 is the storage: moves every uploaded file still on this server (Hostinger) into
+ * R2 and then deletes it from the server. Files no task uses any more are just deleted.
+ * Bundled demo clips (sample-reel-*) stay. Safe to run again — it only touches what's left.
+ */
+export async function moveServerFilesToR2(): Promise<{ moved: number; removed: number; bytes: number; failed: number }> {
+  const result = { moved: 0, removed: 0, bytes: 0, failed: 0 };
+  if (!r2Enabled() || migrating || !fs.existsSync(UPLOADS_DIR)) return result;
+  migrating = true;
+  try {
+    const files = fs.readdirSync(UPLOADS_DIR, { withFileTypes: true })
+      .filter(e => e.isFile() && !e.name.startsWith('sample-reel-') && !e.name.startsWith('.'))
+      .map(e => e.name);
+    for (const name of files) {
+      const localPath = path.join(UPLOADS_DIR, name);
+      try {
+        const stat = fs.statSync(localPath);
+        if (Date.now() - stat.mtimeMs < 10 * 60 * 1000) continue; // may still be in use — next run
+        const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM content_items WHERE video_url = $1', [`/api/videos/${name}`]);
+        if (rows[0]?.n > 0) {
+          await r2PutFile(localPath, name, MIME[path.extname(name).toLowerCase()] || 'application/octet-stream');
+          result.moved++;
+        } else {
+          result.removed++; // no task uses it (e.g. a replaced file)
+        }
+        fs.unlinkSync(localPath);
+        result.bytes += stat.size;
+      } catch (err: any) {
+        result.failed++;
+        console.warn(`[Storage] Could not move ${name} to Cloudflare R2: ${err.message}`);
+      }
+    }
+    if (result.moved || result.removed || result.failed) {
+      console.log(
+        `☁️  [Storage] Moved ${result.moved} file(s) to Cloudflare R2, removed ${result.removed} unused — ` +
+        `${(result.bytes / (1024 * 1024)).toFixed(1)} MB freed on the server` +
+        (result.failed ? `; ${result.failed} will be retried` : '')
+      );
+    }
+  } finally {
+    migrating = false;
+  }
+  return result;
+}
+
 /**
  * Starts the automated background scheduler (runs daily at 24h interval).
  */
@@ -257,6 +312,9 @@ export function startStorageLifecycleScheduler() {
       const settings = rows[0];
       const isEnabled = settings ? settings.auto_cleanup_enabled !== false : true;
       const days = settings && settings.retention_days ? Number(settings.retention_days) : 90;
+
+      // Anything still on the server goes to Cloudflare R2 (retries what failed last time)
+      await moveServerFilesToR2().catch(err => console.warn(`[Storage] Move to R2 skipped: ${err.message}`));
 
       if (!isEnabled) {
         console.log('[Storage Lifecycle]: 90-day auto-cleanup is currently disabled in settings.');

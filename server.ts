@@ -40,8 +40,21 @@ import type { ContentItem, ContentStatus, User, Platform } from './src/types';
 const PORT = Number(process.env.PORT || 3000);
 import { UPLOADS_DIR } from './server/paths';
 import {
-  r2Enabled, R2_PART_SIZE, r2StartUpload, r2SignParts, r2CompleteUpload, r2AbortUpload, r2FileUrl, r2Delete,
+  r2Enabled, R2_PART_SIZE, r2StartUpload, r2SignParts, r2CompleteUpload, r2AbortUpload, r2FileUrl, r2Delete, r2PutFile,
 } from './server/fileStore';
+import { moveServerFilesToR2 } from './server/storageCleanup';
+
+/**
+ * Cloudflare R2 is the storage. Normally the browser uploads straight to R2; if a file did come
+ * through this server (older browser tab / fallback), it is copied to R2 and removed from the
+ * server right away. Without R2 keys (e.g. local testing) files stay in UPLOADS_DIR.
+ */
+async function keepInR2(localPath: string, storedName: string): Promise<void> {
+  if (!r2Enabled()) return;
+  const ext = path.extname(storedName).toLowerCase();
+  await r2PutFile(localPath, storedName, MIME_BY_EXT[ext] || 'application/octet-stream');
+  fs.unlinkSync(localPath);
+}
 // Express request augmented with the signed-in user
 interface AuthedRequest extends Request {
   user: User;
@@ -206,6 +219,11 @@ async function startServer() {
       dbState.ready = true;
       dbState.error = null;
       dbState.since = new Date().toISOString();
+      // Files still on the server (from before Cloudflare R2) → R2, then deleted from the server
+      if (r2Enabled()) {
+        console.log('☁️  [Storage] Cloudflare R2 is on — uploads are stored in R2');
+        moveServerFilesToR2().catch(e => console.warn(`[Storage] Move to R2 failed: ${e.message}`));
+      }
     } catch (err: any) {
       const msg = err.message || String(err);
       if (dbState.ready) {
@@ -761,6 +779,7 @@ async function startServer() {
         const file = req.file;
         if (!file) return res.status(400).json({ error: 'No file provided' });
 
+        await keepInR2(file.path, file.filename);
         const videoUrl = `/api/videos/${file.filename}`;
         const previousUrl = (await db.getContentById(req.params.id))?.video_url;
         const updated = await db.uploadVideoForContent(
@@ -829,6 +848,7 @@ async function startServer() {
         }
 
         const stat = fs.statSync(finalPath);
+        await keepInR2(finalPath, uniqueName);
         const videoUrl = `/api/videos/${uniqueName}`;
         const previousUrl = (await db.getContentById(contentId))?.video_url;
         const updated = await db.uploadVideoForContent(
